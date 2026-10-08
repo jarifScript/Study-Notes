@@ -1,0 +1,154 @@
+import { useRef, useState } from 'react'
+import { X } from 'lucide-react'
+import { client } from '../lib/data'
+import type { Question, QuestionType } from '../types/database'
+import { questionTypes } from '../lib/data'
+import { RichTextEditor } from './RichTextEditor'
+import { VoiceInput } from './VoiceInput'
+import { useToast } from './Toast'
+
+interface QuestionFormProps {
+  chapterId: string
+  initial?: Question
+  initialType: QuestionType
+  onClose: () => void
+  onSaved: () => Promise<void>
+}
+
+export function QuestionForm({ chapterId, initial, initialType, onClose, onSaved }: QuestionFormProps) {
+  const idRef = useRef(initial?.id ?? crypto.randomUUID())
+  const [type, setType] = useState<QuestionType>(initial?.type ?? initialType)
+  const [question, setQuestion] = useState(initial?.question ?? '')
+  const [answer, setAnswer] = useState(initial?.answer ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [uploaded, setUploaded] = useState<{ path: string; url: string }[]>([])
+  const [readyForSave, setReadyForSave] = useState<{ path: string; url: string }[]>([])
+  const questionRef = useRef<HTMLTextAreaElement>(null)
+  const insertAnswerText = useRef<((text: string) => void) | null>(null)
+  const committed = useRef(false)
+  const notify = useToast()
+
+  async function uploadImage(file: File) {
+    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+      throw new Error('Choose an image smaller than 10 MB.')
+    }
+    const path = `${idRef.current}/${crypto.randomUUID()}`
+    const { error: uploadError } = await client().storage.from('question-images').upload(path, file, { contentType: file.type, upsert: false })
+    if (uploadError) throw uploadError
+    const { data, error: urlError } = await client().storage.from('question-images').createSignedUrl(path, 3600)
+    if (urlError) {
+      const { error: removeError } = await client().storage.from('question-images').remove([path])
+      if (removeError) console.error('Could not remove image after signed URL failure:', removeError.message)
+      throw urlError
+    }
+    const uploadedImage = { path, url: data.signedUrl }
+    setUploaded((current) => [...current, uploadedImage])
+    return uploadedImage
+  }
+
+  async function cleanupUncommittedImages() {
+    if (committed.current || !uploaded.length) return
+    const { error: removeError } = await client().storage.from('question-images').remove(uploaded.map((image) => image.path))
+    if (removeError) {
+      console.error('Could not clean up unused question images:', removeError.message)
+      notify('Some unused images could not be removed from storage.', 'error')
+    }
+  }
+
+  async function close() {
+    await cleanupUncommittedImages()
+    onClose()
+  }
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!question.trim()) {
+      setError('Enter a question before saving.')
+      questionRef.current?.focus()
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      let storedAnswer = answer
+      for (const image of readyForSave) storedAnswer = storedAnswer.replaceAll(image.url, `storage://${image.path}`)
+      let position = initial?.position
+      if (!initial || type !== initial.type) {
+        const { data: lastQuestion, error: positionError } = await client().from('questions')
+          .select('position')
+          .eq('chapter_id', chapterId)
+          .eq('type', type)
+          .order('position', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (positionError) throw positionError
+        position = (lastQuestion?.position ?? -1) + 1
+      }
+      const { error: questionError } = await client().from('questions').upsert({
+        id: idRef.current, chapter_id: chapterId, type, question: question.trim(), answer: storedAnswer,
+        position,
+      })
+      if (questionError) throw questionError
+      if (readyForSave.length) {
+        const { error: imageError } = await client().from('question_images').upsert(
+          readyForSave.map((image) => ({ question_id: idRef.current, storage_path: image.path })),
+          { onConflict: 'storage_path' },
+        )
+        if (imageError) throw imageError
+      }
+      const referencedPaths = new Set([...storedAnswer.matchAll(/storage:\/\/([^"]+)/g)].map((match) => match[1]))
+      const { data: existingImages, error: existingError } = await client().from('question_images').select('id, storage_path').eq('question_id', idRef.current)
+      if (existingError) throw existingError
+      const removed = (existingImages ?? []).filter((image) => !referencedPaths.has(image.storage_path))
+      if (removed.length) {
+        const { error: deleteMetadataError } = await client().from('question_images').delete().in('id', removed.map((image) => image.id))
+        if (deleteMetadataError) throw deleteMetadataError
+        const { error: deleteStorageError } = await client().storage.from('question-images').remove(removed.map((image) => image.storage_path))
+        if (deleteStorageError) throw deleteStorageError
+      }
+      committed.current = true
+      await onSaved()
+      onClose()
+    } catch (cause) {
+      if (committed.current) {
+        notify('Question saved, but the list could not refresh. Reopen the subject to see the latest notes.', 'error')
+        onClose()
+      } else {
+        setError(cause instanceof Error ? cause.message : 'Could not save this question. Please try again.')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function insertQuestionText(text: string) {
+    const input = questionRef.current
+    if (!input) {
+      setQuestion((current) => `${current}${current ? ' ' : ''}${text}`)
+      return
+    }
+    const start = input.selectionStart
+    const end = input.selectionEnd
+    const next = `${question.slice(0, start)}${text} ${question.slice(end)}`
+    setQuestion(next)
+    requestAnimationFrame(() => input.setSelectionRange(start + text.length + 1, start + text.length + 1))
+  }
+
+  return (
+    <div className="dialog-backdrop question-backdrop">
+      <form className="question-dialog" onSubmit={(event) => void save(event)} role="dialog" aria-modal="true" aria-labelledby="question-form-title">
+        <header className="dialog-header"><div><span className="eyebrow">{initial ? 'EDIT QUESTION' : 'NEW QUESTION'}</span><h2 id="question-form-title">{initial ? 'Update your notes' : 'Add a question'}</h2></div><button className="icon-button" type="button" onClick={() => void close()} disabled={saving} aria-label="Close"><X size={19} /></button></header>
+        <div className="question-form-body">
+          <label>Question type<select value={type} onChange={(event) => setType(event.target.value as QuestionType)}>{questionTypes.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+          <label className="voice-field-label">Question <VoiceInput onText={insertQuestionText} /></label>
+          <textarea ref={questionRef} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Write your question…" rows={3} maxLength={10000} required />
+          <label className="voice-field-label answer-label">Answer <VoiceInput onText={(text) => insertAnswerText.current?.(text)} /></label>
+          <RichTextEditor value={answer} onChange={setAnswer} onUploadImage={uploadImage} onImageUrlsReady={setReadyForSave} onInsertTextRef={(insert) => { insertAnswerText.current = insert }} />
+          {error && <p className="form-error" role="alert">{error}</p>}
+        </div>
+        <footer className="dialog-footer"><button className="button subtle" type="button" onClick={() => void close()} disabled={saving}>Cancel</button><button className="button primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save question'}</button></footer>
+      </form>
+    </div>
+  )
+}

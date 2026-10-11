@@ -141,6 +141,29 @@ export function AppShell() {
     return () => document.removeEventListener('mousedown', closeOnOutsideClick)
   }, [])
 
+  useEffect(() => {
+    function closeMenusOutsideTarget(event: PointerEvent) {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      document.querySelectorAll<HTMLDetailsElement>('details.row-menu[open]').forEach((menu) => {
+        if (!menu.contains(target)) menu.open = false
+      })
+    }
+    function keepOnlyOneMenuOpen(event: Event) {
+      const openedMenu = event.target
+      if (!(openedMenu instanceof HTMLDetailsElement) || !openedMenu.matches('details.row-menu') || !openedMenu.open) return
+      document.querySelectorAll<HTMLDetailsElement>('details.row-menu[open]').forEach((menu) => {
+        if (menu !== openedMenu) menu.open = false
+      })
+    }
+    document.addEventListener('pointerdown', closeMenusOutsideTarget)
+    document.addEventListener('toggle', keepOnlyOneMenuOpen, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeMenusOutsideTarget)
+      document.removeEventListener('toggle', keepOnlyOneMenuOpen, true)
+    }
+  }, [])
+
   function openSuggestion(suggestion: SearchSuggestion) {
     if (suggestion.kind === 'subject') {
       navigate(`/subject/${suggestion.id}`)

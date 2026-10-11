@@ -3,7 +3,10 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
-import { Bold, Code, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Quote, Undo, Redo } from 'lucide-react'
+import Subscript from '@tiptap/extension-subscript'
+import Superscript from '@tiptap/extension-superscript'
+import { TableKit } from '@tiptap/extension-table/kit'
+import { Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Undo } from 'lucide-react'
 import { client } from '../lib/data'
 
 interface ImageUpload {
@@ -28,7 +31,11 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
       StarterKit,
       Image.configure({ inline: false, allowBase64: false }),
       Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'] }),
+      Subscript,
+      Superscript,
+      TableKit.configure({ table: { resizable: false } }),
     ],
+    shouldRerenderOnTransaction: true,
     content: value,
     editorProps: {
       attributes: { class: 'rich-editor-area', 'aria-label': 'Answer content' },
@@ -114,12 +121,21 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
 
   return (
     <div className="rich-editor">
-      <div className="editor-toolbar" role="toolbar" aria-label="Answer formatting">
-        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} aria-label="Bold" title="Bold" className={editor.isActive('bold') ? 'active' : ''}><Bold size={17} /></button>
-        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic" title="Italic" className={editor.isActive('italic') ? 'active' : ''}><Italic size={17} /></button>
-        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} aria-label="Heading" title="Heading"><Heading2 size={17} /></button>
-        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bulleted list" title="Bulleted list"><List size={17} /></button>
-        <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list" title="Numbered list"><ListOrdered size={17} /></button>
+      <div className="editor-toolbar" role="toolbar" aria-label="Answer formatting" onMouseDown={(event) => event.preventDefault()}>
+        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} aria-label="Bold" title="Bold" aria-pressed={editor.isActive('bold')} className={editor.isActive('bold') ? 'active' : ''}><Bold size={17} /></button>
+        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic" title="Italic" aria-pressed={editor.isActive('italic')} className={editor.isActive('italic') ? 'active' : ''}><Italic size={17} /></button>
+        <button type="button" onClick={() => editor.chain().focus().toggleSubscript().run()} aria-label="Subscript" title="Subscript" aria-pressed={editor.isActive('subscript')} className={editor.isActive('subscript') ? 'active' : ''}><SubscriptIcon size={17} /></button>
+        <button type="button" onClick={() => editor.chain().focus().toggleSuperscript().run()} aria-label="Superscript" title="Superscript" aria-pressed={editor.isActive('superscript')} className={editor.isActive('superscript') ? 'active' : ''}><SuperscriptIcon size={17} /></button>
+        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} aria-label="Heading" title="Heading" aria-pressed={editor.isActive('heading', { level: 2 })} className={editor.isActive('heading', { level: 2 }) ? 'active' : ''}><Heading2 size={17} /></button>
+        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bulleted list" title="Bulleted list" aria-pressed={editor.isActive('bulletList')} className={editor.isActive('bulletList') ? 'active' : ''}><List size={17} /></button>
+        <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list" title="Numbered list" aria-pressed={editor.isActive('orderedList')} className={editor.isActive('orderedList') ? 'active' : ''}><ListOrdered size={17} /></button>
+        <button type="button" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} aria-label="Insert comparison grid" title="Insert comparison grid"><Table2 size={17} /></button>
+        {editor.isActive('table') && <>
+          <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().addRowAfter().run()} aria-label="Add table row" title="Add row"><Rows3 size={17} /><Plus size={12} /></button>
+          <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().deleteRow().run()} aria-label="Remove table row" title="Remove row" disabled={!editor.can().deleteRow()}><Rows3 size={17} /><Minus size={12} /></button>
+          <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().addColumnAfter().run()} aria-label="Add table column" title="Add column"><Columns3 size={17} /><Plus size={12} /></button>
+          <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().deleteColumn().run()} aria-label="Remove table column" title="Remove column" disabled={!editor.can().deleteColumn()}><Columns3 size={17} /><Minus size={12} /></button>
+        </>}
         <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} aria-label="Code block" title="Code block"><Code size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} aria-label="Quote" title="Quote"><Quote size={17} /></button>
         <button type="button" onClick={addLink} aria-label="Add link" title="Add link"><Link2 size={17} /></button>

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown, ChevronUp, Menu, MoreHorizontal, Pencil, Plus, Share2, Trash2 } from 'lucide-react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { client, friendlyError, listChapters, listImagePaths, listQuestions, questionTypes, removeImageFiles } from '../lib/data'
-import type { Chapter, Question, QuestionType, ShareScope, Subject as SubjectRow } from '../types/database'
+import type { AppLanguage, Chapter, Question, QuestionType, ShareScope, Subject as SubjectRow } from '../types/database'
 import { NameDialog } from '../components/NameDialog'
 import { QuestionCard } from '../components/QuestionCard'
 import { QuestionForm } from '../components/QuestionForm'
@@ -12,6 +12,7 @@ import { useToast } from '../components/Toast'
 type Dialog = { title: string; placeholder: string; initialValue?: string; save: (name: string) => Promise<void> } | null
 
 export function SubjectPage({ manage = false }: { manage?: boolean }) {
+  const { language } = useOutletContext<{ language: AppLanguage }>()
   const { id = '' } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
@@ -27,6 +28,7 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [chapterSidebarCollapsed, setChapterSidebarCollapsed] = useState(false)
   const [activeType, setActiveType] = useState<QuestionType>('very_short')
+  const navigationTarget = useRef<QuestionType | null>(null)
   const notify = useToast()
   const chapterId = params.get('chapter') ?? ''
 
@@ -81,11 +83,25 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
   }, [chapterId, chapters, loading, notify])
 
   useEffect(() => {
+    navigationTarget.current = null
     const targets = questionTypes.map((type) => document.getElementById(`section-${type.id}`)).filter((element): element is HTMLElement => Boolean(element))
     if (!targets.length) return
     const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
-      if (visible) setActiveType(visible.target.id.replace('section-', '') as QuestionType)
+      if (navigationTarget.current) {
+        const target = entries.find((entry) => entry.target.id === `section-${navigationTarget.current}` && entry.isIntersecting)
+        if (target) {
+          setActiveType(navigationTarget.current)
+          navigationTarget.current = null
+        }
+        return
+      }
+      const activeLine = window.innerHeight * 0.23
+      const sections = targets.map((target) => ({ target, bounds: target.getBoundingClientRect() }))
+      const current = sections.find(({ bounds }) => bounds.top <= activeLine && bounds.bottom > activeLine)
+      const nearest = current ?? sections.sort((a, b) =>
+        Math.abs(a.bounds.top - activeLine) - Math.abs(b.bounds.top - activeLine),
+      )[0]
+      if (nearest) setActiveType(nearest.target.id.replace('section-', '') as QuestionType)
     }, { rootMargin: '-18% 0px -72% 0px' })
     targets.forEach((target) => observer.observe(target))
     return () => observer.disconnect()
@@ -191,17 +207,20 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
   const grouped = useMemo(() => Object.fromEntries(questionTypes.map(({ id: type }) => [
     type, questions.filter((question) => question.type === type).sort((a, b) => a.position - b.position),
   ])) as Record<QuestionType, Question[]>, [questions])
+  const questionNumbers = useMemo(() => new Map(
+    questionTypes.flatMap(({ id: type }) => grouped[type].map((question, index) => [question.id, index + 1] as const)),
+  ), [grouped])
   const activeChapter = chapters.find((chapter) => chapter.id === chapterId)
 
   return (
     <div className={`workspace subject-workspace ${chapterSidebarCollapsed ? 'chapter-sidebar-collapsed' : ''}`}>
       <aside className={`side-panel chapter-panel ${drawerOpen ? 'drawer-open' : ''}`}>
-        <div className="chapter-sidebar-top"><Link to={`${manage ? '/manage' : '/'}${subject ? `?semester=${encodeURIComponent(subject.semester_id)}` : ''}`} className="back-link"><ArrowLeft size={16} /> {manage ? 'Manage' : 'Library'}</Link><button className="icon-button mobile-close" onClick={() => setDrawerOpen(false)} aria-label="Close chapters"><XIcon /></button></div>
-        <div className="panel-heading"><div><span className="eyebrow">{manage ? 'MANAGE SUBJECT' : 'SUBJECT'}</span><h2>{subject?.name ?? 'Chapters'}</h2></div>{manage && <button className="icon-button" onClick={() => setSharing({ scopeType: 'subject', scopeId: id, title: 'subject' })} aria-label="Share subject" title="Share subject"><Share2 size={17} /></button>}</div>
+        <div className="chapter-sidebar-top"><Link to={`${manage ? '/manage' : '/'}${subject ? `?semester=${encodeURIComponent(subject.semester_id)}` : ''}`} className="back-link"><ArrowLeft size={16} /> {manage ? (language === 'bn' ? 'ম্যানেজ' : 'Manage') : (language === 'bn' ? 'লাইব্রেরি' : 'Library')}</Link><button className="icon-button mobile-close" onClick={() => setDrawerOpen(false)} aria-label="Close chapters"><XIcon /></button></div>
+        <div className="panel-heading"><div><span className="eyebrow">{manage ? (language === 'bn' ? 'ম্যানেজ বিষয়' : 'MANAGE SUBJECT') : (language === 'bn' ? 'বিষয়' : 'SUBJECT')}</span><h2>{subject?.name ?? 'Chapters'}</h2></div>{manage && <button className="icon-button" onClick={() => setSharing({ scopeType: 'subject', scopeId: id, title: 'subject' })} aria-label="Share subject" title="Share subject"><Share2 size={17} /></button>}</div>
         <nav className="chapter-list" aria-label="Chapters">
           {chapters.map((chapter, index) => (
             <div className={`chapter-row ${chapter.id === chapterId ? 'selected' : ''}`} key={chapter.id}>
-              <button className="chapter-select" onClick={() => { setParams({ chapter: chapter.id }); setDrawerOpen(false) }}>{chapter.name}</button>
+              <button className="chapter-select" onClick={() => { setParams({ chapter: chapter.id }); setDrawerOpen(false) }}><span className="chapter-serial">{String(index + 1).padStart(2, '0')}</span><span className="chapter-name">{chapter.name}</span></button>
               {manage && <details className="row-menu">
                 <summary aria-label={`Actions for ${chapter.name}`}><MoreHorizontal size={17} /></summary>
                 <div className="menu-popover">
@@ -231,16 +250,24 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
               {manage && <button className="icon-button chapter-share-button" aria-label="Share chapter" title="Share chapter" onClick={() => setSharing({ scopeType: 'chapter', scopeId: activeChapter.id, title: 'chapter' })}><Share2 size={18} /></button>}
             </header>
             <div className="chapter-details-row">
-              <p className="chapter-question-count">{questions.length} {questions.length === 1 ? 'question' : 'questions'}</p>
+              <p className="chapter-question-count">{questions.length} {language === 'bn' ? 'প্রশ্ন' : questions.length === 1 ? 'question' : 'questions'}</p>
               <nav className="quick-nav" aria-label="Jump to question section">
-                {questionTypes.map((item) => <a key={item.id} className={activeType === item.id ? 'active' : ''} href={`#section-${item.id}`} onClick={() => setActiveType(item.id)}>{item.title}</a>)}
+                {questionTypes.map((item) => <a key={item.id} className={activeType === item.id ? 'active' : ''} href={`#section-${item.id}`} onClick={(event) => {
+                  event.preventDefault()
+                  setActiveType(item.id)
+                  const target = document.getElementById(`section-${item.id}`)
+                  const targetBounds = target?.getBoundingClientRect()
+                  const isInActiveBand = targetBounds && targetBounds.top < window.innerHeight * 0.28 && targetBounds.bottom > window.innerHeight * 0.18
+                  navigationTarget.current = isInActiveBand ? null : item.id
+                  target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}>{language === 'bn' ? item.banglaTitle : item.title}</a>)}
               </nav>
             </div>
             <div className="question-sections">
               {questionTypes.map((type) => (
                 <section className="question-section" id={`section-${type.id}`} key={type.id}>
-                  <div className="section-heading"><div><span className="eyebrow">QUESTION TYPE</span><h2>{type.title} Questions <span className="count-badge">{grouped[type.id].length}</span></h2></div>{manage && <button className="button outline-button" onClick={() => setQuestionForm({ initialType: type.id })}><Plus size={16} /> Add Question</button>}</div>
-                  {loadingQuestions ? <div className="section-empty section-loading">Loading questions…</div> : grouped[type.id].length ? <div className="question-list">{grouped[type.id].map((question) => <QuestionCard key={question.id} question={question} readOnly={!manage} onEdit={manage ? () => setQuestionForm({ initialType: type.id, question }) : undefined} onDelete={manage ? () => void deleteQuestion(question) : undefined} onMove={manage ? (direction) => void moveQuestion(question, direction) : undefined} />)}</div> : <div className="section-empty">{manage ? `No ${type.title.toLowerCase()} questions yet.` : `No ${type.title.toLowerCase()} questions in this chapter.`}</div>}
+                  <div className="section-heading"><div><span className="eyebrow">{language === 'bn' ? 'প্রশ্নের ধরণ' : 'QUESTION TYPE'}</span><h2>{language === 'bn' ? type.banglaQuestionTitle : type.questionTitle} <span className="count-badge">{grouped[type.id].length}</span></h2></div>{manage && <button className="button outline-button" onClick={() => setQuestionForm({ initialType: type.id })}><Plus size={16} /> Add Question</button>}</div>
+                  {loadingQuestions ? <div className="section-empty section-loading">Loading questions…</div> : grouped[type.id].length ? <div className="question-list">{grouped[type.id].map((question) => <QuestionCard key={question.id} question={question} serialNumber={questionNumbers.get(question.id)} readOnly={!manage} onEdit={manage ? () => setQuestionForm({ initialType: type.id, question }) : undefined} onDelete={manage ? () => void deleteQuestion(question) : undefined} onMove={manage ? (direction) => void moveQuestion(question, direction) : undefined} />)}</div> : <div className="section-empty">{manage ? `No ${type.title.toLowerCase()} questions yet.` : `No ${type.title.toLowerCase()} questions in this chapter.`}</div>}
                 </section>
               ))}
             </div>
@@ -248,7 +275,7 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
         )}
       </main>
       {dialog && <NameDialog title={dialog.title} placeholder={dialog.placeholder} initialValue={dialog.initialValue} onSave={dialog.save} onClose={() => setDialog(null)} />}
-      {questionForm && <QuestionForm chapterId={chapterId} initial={questionForm.question} initialType={questionForm.initialType} onClose={() => setQuestionForm(null)} onSaved={async () => { setQuestions(await listQuestions(chapterId)); notify('Question saved.') }} />}
+      {questionForm && <QuestionForm chapterId={chapterId} initial={questionForm.question} initialType={questionForm.initialType} language={language} onClose={() => setQuestionForm(null)} onSaved={async () => { setQuestions(await listQuestions(chapterId)); notify('Question saved.') }} />}
       {sharing && <ShareDialog scopeType={sharing.scopeType} scopeId={sharing.scopeId} title={sharing.title} onClose={() => setSharing(null)} />}
     </div>
   )

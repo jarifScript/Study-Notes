@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { BookOpen, ChevronRight, LibraryBig, Menu, PanelLeftClose, PanelLeftOpen, Settings2, X } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import { friendlyError, listSemesters, listSubjects } from '../lib/data'
-import type { Semester, Subject } from '../types/database'
+import type { AppLanguage, Semester, Subject } from '../types/database'
 import { useToast } from '../components/Toast'
 
 export function Home() {
+  const { language } = useOutletContext<{ language: AppLanguage }>()
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
@@ -68,12 +69,12 @@ export function Home() {
     {sidebarOpen && <button className="browse-drawer-scrim" aria-label="Close semester menu" onClick={() => setSidebarOpen(false)} />}
     <aside className={`browse-sidebar ${sidebarOpen ? 'is-open' : ''}`} aria-label="Semester navigation">
       <div className="browse-sidebar-heading">
-        <div><span className="eyebrow">YOUR LIBRARY</span><h2>Semesters</h2></div>
+        <div><span className="eyebrow">{language === 'bn' ? 'আপনার লাইব্রেরি' : 'YOUR LIBRARY'}</span><h2>{language === 'bn' ? 'সেমিস্টার' : 'Semesters'}</h2></div>
         <button className="icon-button sidebar-close-mobile" onClick={() => setSidebarOpen(false)} aria-label="Close semester sidebar"><X size={18} /></button>
         <button className="icon-button sidebar-close-wide" onClick={() => setSidebarOpen(false)} aria-label="Close semester sidebar"><PanelLeftClose size={18} /></button>
       </div>
       {loading ? <div className="browse-sidebar-skeleton" aria-label="Loading semesters" /> : semesters.length ? (
-        <nav className="browse-semesters" aria-label="Choose a semester">
+        <nav className="browse-semesters" aria-label={language === 'bn' ? 'সেমিস্টার বেছে নিন' : 'Choose a semester'}>
           {semesters.map((semester, index) => <button key={semester.id} className={`browse-semester ${semester.id === selectedId ? 'selected' : ''}`} onClick={() => selectSemester(semester.id)}>
             <span className="semester-index">{String(index + 1).padStart(2, '0')}</span><span>{semester.name}</span><ChevronRight size={16} />
           </button>)}
@@ -86,8 +87,8 @@ export function Home() {
         <button className="icon-button sidebar-toggle" onClick={() => setSidebarOpen((open) => !open)} aria-label={sidebarOpen ? 'Close semester sidebar' : 'Open semester sidebar'} title={sidebarOpen ? 'Close semester sidebar' : 'Open semester sidebar'}>
           {sidebarOpen ? <PanelLeftClose size={19} /> : <><Menu size={19} /><PanelLeftOpen className="wide-sidebar-icon" size={18} /></>}
         </button>
-        <div><span className="eyebrow">{selectedSemester?.name ?? 'YOUR LIBRARY'}</span><h1>Subjects</h1></div>
-        {selectedSemester && <span className="browse-count">{subjects.length} {subjects.length === 1 ? 'subject' : 'subjects'}</span>}
+        <div><span className="eyebrow">{selectedSemester?.name ?? (language === 'bn' ? 'আপনার লাইব্রেরি' : 'YOUR LIBRARY')}</span><h1>{language === 'bn' ? 'বিষয়' : 'Subjects'}</h1></div>
+        {selectedSemester && <span className="browse-count">{subjects.length} {language === 'bn' ? 'বিষয়' : subjects.length === 1 ? 'subject' : 'subjects'}</span>}
       </header>
       {loading ? <div className="browse-subject-grid browse-subject-grid-loading" aria-label="Loading subjects">{[1, 2, 3].map((item) => <div className="browse-subject-skeleton" key={item} />)}</div>
         : semesters.length === 0 ? <section className="browse-empty">

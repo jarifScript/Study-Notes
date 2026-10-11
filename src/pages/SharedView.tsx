@@ -7,13 +7,17 @@ import { QuestionCard } from '../components/QuestionCard'
 import type { SharedChapter, SharedPayload, SharedSubject } from '../types/shared'
 
 function SharedQuestions({ chapter, shareImage }: { chapter: SharedChapter; shareImage: (path: string) => Promise<string> }) {
+  const questionNumbers = new Map(
+    questionTypes.flatMap(({ id }) => chapter.questions.filter((question) => question.type === id).sort((a, b) => a.position - b.position)
+      .map((question, index) => [question.id, index + 1] as const)),
+  )
   return <section className="shared-chapter">
     <h2>{chapter.name}</h2>
     {chapter.questions.length ? questionTypes.map((type) => {
       const questions = chapter.questions.filter((question) => question.type === type.id).sort((a, b) => a.position - b.position)
       return questions.length ? <section className="shared-question-group" key={type.id}>
         <h3>{type.title} Questions</h3>
-        {questions.map((question) => <QuestionCard key={question.id} question={question} readOnly shareImage={shareImage} />)}
+        {questions.map((question) => <QuestionCard key={question.id} question={question} serialNumber={questionNumbers.get(question.id)} readOnly shareImage={shareImage} />)}
       </section> : null
     }) : <p className="muted">No questions in this chapter yet.</p>}
   </section>

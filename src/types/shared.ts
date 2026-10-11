@@ -5,6 +5,7 @@ export interface SharedQuestion {
   type: QuestionType
   question: string
   answer: string
+  board_years: number[]
   position: number
   images: { id: string; storage_path: string }[]
 }

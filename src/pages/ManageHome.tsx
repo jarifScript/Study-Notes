@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, BookOpen, Menu, MoreHorizontal, Plus, Pencil, Share2, Trash2, X } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { BookOpen, Menu, MoreHorizontal, Plus, Pencil, Share2, Trash2, X } from 'lucide-react'
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import { client, friendlyError, listImagePaths, listSemesters, listSubjects, removeImageFiles } from '../lib/data'
-import type { Semester, Subject } from '../types/database'
+import type { AppLanguage, Semester, Subject } from '../types/database'
 import { useToast } from '../components/Toast'
 import { NameDialog } from '../components/NameDialog'
 import { ShareDialog } from '../components/ShareDialog'
@@ -11,6 +11,7 @@ import type { ShareScope } from '../types/database'
 type Dialog = { title: string; placeholder: string; initialValue?: string; save: (name: string) => Promise<void> } | null
 
 export function ManageHome() {
+  const { language } = useOutletContext<{ language: AppLanguage }>()
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
@@ -114,8 +115,8 @@ export function ManageHome() {
   return (
     <div className="workspace">
       <aside className={`side-panel semester-panel ${drawerOpen ? 'drawer-open' : ''}`}>
-        <div className="panel-heading"><div><span className="eyebrow">YOUR LIBRARY</span><h2>Semesters</h2></div><button className="icon-button mobile-close" onClick={() => setDrawerOpen(false)} aria-label="Close semesters"><X size={18} /></button></div>
-        <nav className="semester-list" aria-label="Semesters">
+        <div className="panel-heading"><div><span className="eyebrow">{language === 'bn' ? 'আপনার লাইব্রেরি' : 'YOUR LIBRARY'}</span><h2>{language === 'bn' ? 'সেমিস্টার' : 'Semesters'}</h2></div><button className="icon-button mobile-close" onClick={() => setDrawerOpen(false)} aria-label="Close semesters"><X size={18} /></button></div>
+        <nav className="semester-list" aria-label={language === 'bn' ? 'সেমিস্টার' : 'Semesters'}>
           {semesters.map((semester) => (
             <div className={`semester-row ${semester.id === selectedId ? 'selected' : ''}`} key={semester.id}>
               <button className="semester-select" onClick={() => { setSearchParams({ semester: semester.id }); setDrawerOpen(false) }}>{semester.name}</button>
@@ -142,8 +143,8 @@ export function ManageHome() {
         ) : (
           <>
             <div className="page-heading">
-              <div className="page-title-row"><button className="icon-button library-menu-button" onClick={() => setDrawerOpen(true)} aria-label="Open semesters"><Menu size={19} /></button><div><Link to="/" className="back-link manager-back"><ArrowLeft size={15} /> Back to library</Link><span className="eyebrow">SEMESTER</span><h1>{selectedSemester?.name ?? 'Your subjects'}</h1><p className="muted">{subjects.length} {subjects.length === 1 ? 'subject' : 'subjects'}</p></div></div>
-              {selectedSemester && <div className="heading-actions"><button className="button outline-button" onClick={() => setSharing(selectedSemester)} aria-label="Share semester"><Share2 size={17} /> Share</button><button className="button primary" onClick={() => setDialog({ title: 'Add subject', placeholder: 'e.g. Physics', save: (name) => saveSubject(name) })}><Plus size={17} /> Add Subject</button></div>}
+              <div className="page-title-row"><button className="icon-button library-menu-button" onClick={() => setDrawerOpen(true)} aria-label="Open semesters"><Menu size={19} /></button><div><h1>{selectedSemester?.name ?? 'Your subjects'}</h1><p className="muted">{subjects.length} {language === 'bn' ? 'বিষয়' : subjects.length === 1 ? 'subject' : 'subjects'}</p></div></div>
+              {selectedSemester && <div className="heading-actions"><button className="button outline-button" onClick={() => setSharing(selectedSemester)} aria-label="Share semester"><Share2 size={17} /> Share</button></div>}
             </div>
             {subjects.length === 0 ? (
               <section className="empty-state">

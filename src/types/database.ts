@@ -1,5 +1,6 @@
 export type QuestionType = 'very_short' | 'short' | 'long'
 export type ShareScope = 'semester' | 'subject' | 'chapter' | 'question'
+export type AppLanguage = 'en' | 'bn'
 
 export interface Semester {
   id: string
@@ -30,6 +31,7 @@ export interface Question {
   type: QuestionType
   question: string
   answer: string
+  board_years: number[]
   position: number
   created_at: string
   updated_at: string

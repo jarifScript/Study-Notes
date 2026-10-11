@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Search as SearchIcon } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import { client, friendlyError } from '../lib/data'
-import type { QuestionType } from '../types/database'
+import type { AppLanguage, QuestionType } from '../types/database'
 import { useToast } from '../components/Toast'
 
 interface SearchResult {
@@ -15,6 +15,7 @@ interface SearchResult {
 }
 
 export function SearchPage() {
+  const { language } = useOutletContext<{ language: AppLanguage }>()
   const [params] = useSearchParams()
   const term = params.get('q')?.trim() ?? ''
   const [results, setResults] = useState<SearchResult[]>([])
@@ -46,13 +47,13 @@ export function SearchPage() {
   }, [notify, term])
 
   return <main className="page-content search-content">
-    <div className="page-heading"><div><span className="eyebrow">YOUR LIBRARY</span><h1>Search notes</h1><p className="muted">{term ? `Results for “${term}”` : 'Search across your questions and answers.'}</p></div></div>
+    <div className="page-heading"><div><span className="eyebrow">{language === 'bn' ? 'আপনার লাইব্রেরি' : 'YOUR LIBRARY'}</span><h1>Search notes</h1><p className="muted">{term ? `Results for “${term}”` : 'Search across your questions and answers.'}</p></div></div>
     {!term ? <section className="empty-state"><div className="empty-icon"><SearchIcon size={21} /></div><h2>Start searching</h2><p>Type in the search box above to find questions and answers.</p></section> : loading ? <div className="loading-panel" /> : results.length === 0 ? <section className="empty-state"><h2>No matches found</h2><p>Try another word or phrase.</p></section> : (
       <div className="search-results">{results.map((result) => {
         const subject = result.chapters?.subjects
         const semester = subject?.semesters
         return <Link className="search-result" key={result.id} to={`/subject/${subject?.id ?? ''}?chapter=${result.chapter_id}`}>
-          <span className="eyebrow">{semester?.name ?? 'Semester'} / {subject?.name ?? 'Subject'} / {result.chapters?.name ?? 'Chapter'}</span>
+          <span className="eyebrow">{semester?.name ?? (language === 'bn' ? 'সেমিস্টার' : 'Semester')} / {subject?.name ?? (language === 'bn' ? 'বিষয়' : 'Subject')} / {result.chapters?.name ?? 'Chapter'}</span>
           <h2>{result.question}</h2><p>{result.answer.replace(/<[^>]*>/g, ' ').slice(0, 240)}</p>
         </Link>
       })}</div>

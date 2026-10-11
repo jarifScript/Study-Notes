@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Chapter, Question, QuestionType, Semester, ShareLink, ShareScope, Subject } from '../types/database'
+import type { AppLanguage, Chapter, Question, QuestionType, Semester, ShareLink, ShareScope, Subject } from '../types/database'
 
 export function client() {
   if (!supabase) throw new Error('Supabase is not configured. Add the required environment variables.')
@@ -85,8 +85,24 @@ export function friendlyError(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 }
 
-export const questionTypes: { id: QuestionType; title: string }[] = [
-  { id: 'very_short', title: 'Very Short' },
-  { id: 'short', title: 'Short' },
-  { id: 'long', title: 'Long' },
+export async function getAppLanguage() {
+  const { data, error } = await client().from('app_settings').select('language').eq('id', true).single()
+  if (error) throw error
+  if (data.language !== 'en' && data.language !== 'bn') throw new Error('The saved language setting is invalid.')
+  return data.language as AppLanguage
+}
+
+export function isMissingAppSettingsTable(error: unknown) {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'PGRST205'
+}
+
+export async function updateAppLanguage(language: AppLanguage) {
+  const { error } = await client().from('app_settings').update({ language }).eq('id', true)
+  if (error) throw error
+}
+
+export const questionTypes: { id: QuestionType; title: string; banglaTitle: string; questionTitle: string; banglaQuestionTitle: string }[] = [
+  { id: 'very_short', title: 'Very Short', banglaTitle: 'অতি সংক্ষিপ্ত', questionTitle: 'Very Short Questions', banglaQuestionTitle: 'অতি সংক্ষিপ্ত প্রশ্ন' },
+  { id: 'short', title: 'Short', banglaTitle: 'সংক্ষিপ্ত', questionTitle: 'Short Questions', banglaQuestionTitle: 'সংক্ষিপ্ত প্রশ্ন' },
+  { id: 'long', title: 'Long', banglaTitle: 'রচনামূলক', questionTitle: 'Long Questions', banglaQuestionTitle: 'রচনামূলক প্রশ্ন' },
 ]

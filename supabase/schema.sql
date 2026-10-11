@@ -2,6 +2,25 @@ create table public.admin_config (
   user_id uuid primary key references auth.users(id) on delete cascade
 );
 
+create table public.app_settings (
+  id boolean primary key default true check (id),
+  language text not null default 'en' check (language in ('en', 'bn'))
+);
+
+insert into public.app_settings (id, language) values (true, 'en');
+
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+    and not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'app_settings'
+    ) then
+    execute 'alter publication supabase_realtime add table public.app_settings';
+  end if;
+end;
+$$;
+
 create or replace function public.is_notes_admin()
 returns boolean
 language sql
@@ -43,6 +62,7 @@ create table public.questions (
   type text not null check (type in ('very_short', 'short', 'long')),
   question text not null check (length(trim(question)) > 0),
   answer text not null default '',
+  board_years integer[] not null default '{}',
   position integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -86,6 +106,7 @@ before update on public.questions
 for each row execute function public.touch_question_updated_at();
 
 alter table public.admin_config enable row level security;
+alter table public.app_settings enable row level security;
 alter table public.semesters enable row level security;
 alter table public.subjects enable row level security;
 alter table public.chapters enable row level security;
@@ -95,6 +116,8 @@ alter table public.share_links enable row level security;
 
 create policy "Only the configured admin accesses configuration"
 on public.admin_config for select to authenticated using (public.is_notes_admin());
+create policy "Only admins manage app settings"
+on public.app_settings for all to authenticated using (public.is_notes_admin()) with check (public.is_notes_admin());
 create policy "Only the admin manages semesters"
 on public.semesters for all to authenticated using (public.is_notes_admin()) with check (public.is_notes_admin());
 create policy "Only the admin manages subjects"
@@ -175,7 +198,7 @@ begin
 
   if link.scope_type = 'question' then
     select jsonb_build_object('scope_type', link.scope_type, 'question', jsonb_build_object(
-      'id', q.id, 'type', q.type, 'question', q.question, 'answer', q.answer,
+      'id', q.id, 'type', q.type, 'question', q.question, 'answer', q.answer, 'board_years', q.board_years,
       'position', q.position, 'images', coalesce((
         select jsonb_agg(jsonb_build_object('id', i.id, 'storage_path', i.storage_path) order by i.created_at)
         from public.question_images i where i.question_id = q.id
@@ -193,7 +216,7 @@ begin
     select jsonb_build_object('scope_type', link.scope_type, 'chapter',
       jsonb_build_object('id', c.id, 'name', c.name, 'subject', jsonb_build_object('id', s.id, 'name', s.name),
         'questions', coalesce((select jsonb_agg(jsonb_build_object(
-          'id', q.id, 'type', q.type, 'question', q.question, 'answer', q.answer, 'position', q.position,
+          'id', q.id, 'type', q.type, 'question', q.question, 'answer', q.answer, 'board_years', q.board_years, 'position', q.position,
           'images', coalesce((select jsonb_agg(jsonb_build_object('id', i.id, 'storage_path', i.storage_path) order by i.created_at)
             from public.question_images i where i.question_id = q.id), '[]'::jsonb)
         ) order by q.position) from public.questions q where q.chapter_id = c.id), '[]'::jsonb))
@@ -205,7 +228,7 @@ begin
       jsonb_build_object('id', s.id, 'name', s.name, 'semester', jsonb_build_object('id', se.id, 'name', se.name),
         'chapters', coalesce((select jsonb_agg(jsonb_build_object(
           'id', c.id, 'name', c.name, 'questions', coalesce((select jsonb_agg(jsonb_build_object(
-            'id', q.id, 'type', q.type, 'question', q.question, 'answer', q.answer, 'position', q.position,
+            'id', q.id, 'type', q.type, 'question', q.question, 'answer', q.answer, 'board_years', q.board_years, 'position', q.position,
             'images', coalesce((select jsonb_agg(jsonb_build_object('id', i.id, 'storage_path', i.storage_path) order by i.created_at)
               from public.question_images i where i.question_id = q.id), '[]'::jsonb)
           ) order by q.position) from public.questions q where q.chapter_id = c.id), '[]'::jsonb)
@@ -219,7 +242,7 @@ begin
         'subjects', coalesce((select jsonb_agg(jsonb_build_object(
           'id', s.id, 'name', s.name, 'chapters', coalesce((select jsonb_agg(jsonb_build_object(
             'id', c.id, 'name', c.name, 'questions', coalesce((select jsonb_agg(jsonb_build_object(
-              'id', q.id, 'type', q.type, 'question', q.question, 'answer', q.answer, 'position', q.position,
+              'id', q.id, 'type', q.type, 'question', q.question, 'answer', q.answer, 'board_years', q.board_years, 'position', q.position,
               'images', coalesce((select jsonb_agg(jsonb_build_object('id', i.id, 'storage_path', i.storage_path) order by i.created_at)
                 from public.question_images i where i.question_id = q.id), '[]'::jsonb)
             ) order by q.position) from public.questions q where q.chapter_id = c.id), '[]'::jsonb)
@@ -237,7 +260,8 @@ revoke all on function public.get_shared_content(text) from public;
 grant execute on function public.get_shared_content(text) to anon, authenticated, service_role;
 
 revoke all on public.admin_config, public.semesters, public.subjects, public.chapters,
-  public.questions, public.question_images, public.share_links from anon;
+  public.questions, public.question_images, public.share_links, public.app_settings from anon;
 grant select on public.admin_config to authenticated;
 grant select, insert, update, delete on public.semesters, public.subjects, public.chapters,
   public.questions, public.question_images, public.share_links to authenticated;
+grant select, update on public.app_settings to authenticated;

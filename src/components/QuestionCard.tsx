@@ -6,8 +6,9 @@ import { client, friendlyError } from '../lib/data'
 import { ShareDialog } from './ShareDialog'
 import { useToast } from './Toast'
 
-export function QuestionCard({ question, onEdit, onDelete, onMove, readOnly = false, shareImage }: {
-  question: Pick<Question, 'id' | 'type' | 'question' | 'answer' | 'position'>
+export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove, readOnly = false, shareImage }: {
+  question: Pick<Question, 'id' | 'type' | 'question' | 'answer' | 'board_years' | 'position'>
+  serialNumber?: number
   onEdit?: () => void
   onDelete?: () => void
   onMove?: (direction: -1 | 1) => void
@@ -46,15 +47,14 @@ export function QuestionCard({ question, onEdit, onDelete, onMove, readOnly = fa
     return () => { active = false }
   }, [notify, question.answer, readOnly, shareImage])
 
-  const typeLabel = question.type === 'very_short' ? 'Very Short' : question.type === 'short' ? 'Short' : 'Long'
-
   return (
     <article className="question-card" id={`question-${question.id}`}>
       <div className="question-card-heading">
         <button className="question-toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
           {expanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-          <span className="question-number">{typeLabel}</span>
+          {serialNumber !== undefined && <span className="question-serial">{String(serialNumber).padStart(2, '0')}</span>}
           <span className="question-title">{question.question}</span>
+          {question.board_years?.length > 0 && <span className="board-year-badge">Board - {question.board_years.join(', ')}</span>}
         </button>
         {!readOnly && <div className="question-tools">
           {onMove && <button className="icon-button compact" onClick={() => onMove(-1)} aria-label="Move question up"><ChevronUp size={17} /></button>}

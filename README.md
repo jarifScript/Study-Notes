@@ -12,6 +12,8 @@ A private study-notes library for multiple explicitly configured admins, built w
 
 1. Create a Supabase project and open **Project Settings → API**. Keep the project URL and **anon/public** key for the frontend. Never put the service-role key in a `VITE_` variable or in frontend code.
 2. Open **SQL Editor**, paste in [`supabase/schema.sql`](./supabase/schema.sql), and run it once. This creates the empty notes tables, multi-admin RLS policies, the private `question-images` bucket, and the share-content RPC. If the original single-admin schema is already installed, run [`supabase/migrations/20261008_multi_admin.sql`](./supabase/migrations/20261008_multi_admin.sql) instead; do not rerun the full schema.
+   Existing projects should also run [`supabase/migrations/20261010_app_language.sql`](./supabase/migrations/20261010_app_language.sql) to enable the shared English/Bangla question-section setting.
+   Run [`supabase/migrations/20261010_question_board_years.sql`](./supabase/migrations/20261010_question_board_years.sql) on existing projects to add board years to questions and shared pages.
 3. In **Authentication → Users**, create the email/password account for each person who should administer the library. Do not build or enable an app signup flow. In **Authentication → Settings**, disable **Allow new users to sign up**.
 4. In SQL Editor, add each authorized existing user as an admin. Run this statement once per account, changing the email:
 

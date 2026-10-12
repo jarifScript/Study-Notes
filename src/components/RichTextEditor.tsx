@@ -6,7 +6,7 @@ import Link from '@tiptap/extension-link'
 import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import { TableKit } from '@tiptap/extension-table/kit'
-import { Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Undo } from 'lucide-react'
+import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Undo } from 'lucide-react'
 import { client } from '../lib/data'
 
 interface ImageUpload {
@@ -119,6 +119,8 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
 
   if (!editor) return <div className="editor-loading">Loading editor…</div>
 
+  const isCellCentered = editor.isActive('tableCell', { align: 'center' }) || editor.isActive('tableHeader', { align: 'center' })
+
   return (
     <div className="rich-editor">
       <div className="editor-toolbar" role="toolbar" aria-label="Answer formatting" onMouseDown={(event) => event.preventDefault()}>
@@ -131,6 +133,7 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
         <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list" title="Numbered list" aria-pressed={editor.isActive('orderedList')} className={editor.isActive('orderedList') ? 'active' : ''}><ListOrdered size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} aria-label="Insert comparison grid" title="Insert comparison grid"><Table2 size={17} /></button>
         {editor.isActive('table') && <>
+          <button type="button" onClick={() => editor.chain().focus().setCellAttribute('align', isCellCentered ? null : 'center').run()} aria-label="Center cell text" title="Center cell text" aria-pressed={isCellCentered} className={isCellCentered ? 'active' : ''}><AlignCenter size={17} /></button>
           <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().addRowAfter().run()} aria-label="Add table row" title="Add row"><Rows3 size={17} /><Plus size={12} /></button>
           <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().deleteRow().run()} aria-label="Remove table row" title="Remove row" disabled={!editor.can().deleteRow()}><Rows3 size={17} /><Minus size={12} /></button>
           <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().addColumnAfter().run()} aria-label="Add table column" title="Add column"><Columns3 size={17} /><Plus size={12} /></button>

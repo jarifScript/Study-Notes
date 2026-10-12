@@ -148,7 +148,7 @@ export function ManageHome() {
             </div>
             {subjects.length === 0 ? (
               <section className="empty-state">
-                <div className="empty-icon"><BookOpen size={21} /></div><h2>No subjects yet</h2><p>Add your first subject to this semester.</p>
+                <div className="empty-icon"><BookOpen size={21} /></div><h2>{language === 'bn' ? 'কোনো সাবজেক্ট নেই' : 'No subjects yet'}</h2><p>Add your first subject to this semester.</p>
                 <button className="button primary" onClick={() => setDialog({ title: 'Add subject', placeholder: 'e.g. Physics', save: (name) => saveSubject(name) })}><Plus size={17} /> Add Subject</button>
               </section>
             ) : (

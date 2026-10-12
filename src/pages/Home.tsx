@@ -97,7 +97,7 @@ export function Home() {
           <Link className="button primary" to="/manage">Open library manager <ChevronRight size={17} /></Link>
         </section>
         : loadingSubjects ? <div className="browse-subject-grid browse-subject-grid-loading" aria-label="Loading subjects">{[1, 2, 3].map((item) => <div className="browse-subject-skeleton" key={item} />)}</div>
-          : subjects.length === 0 ? <section className="browse-empty-subject browse-no-subjects"><BookOpen size={23} /><h2>No subjects yet</h2><p>There are no subjects in this semester yet.</p></section>
+          : subjects.length === 0 ? <section className="browse-empty-subject browse-no-subjects"><BookOpen size={23} /><h2>{language === 'bn' ? 'কোনো সাবজেক্ট নেই' : 'No subjects yet'}</h2><p>{language === 'bn' ? 'এই সেমিস্টারে এখনও কোনো সাবজেক্ট নেই।' : 'There are no subjects in this semester yet.'}</p></section>
             : <div className="browse-subject-grid browse-subject-grid-main">
               {subjects.map((subject) => <Link className="browse-subject" to={`/subject/${subject.id}`} key={subject.id}>
                 <span className="browse-subject-icon"><BookOpen size={19} /></span><span className="browse-subject-name">{subject.name}</span><ChevronRight size={17} />

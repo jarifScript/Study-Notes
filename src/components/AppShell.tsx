@@ -19,6 +19,8 @@ export function AppShell() {
   const [languageLoaded, setLanguageLoaded] = useState(false)
   const [languageAvailable, setLanguageAvailable] = useState(false)
   const [savingLanguage, setSavingLanguage] = useState(false)
+  const [signOutConfirmationOpen, setSignOutConfirmationOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
   const searchBox = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
@@ -78,8 +80,19 @@ export function AppShell() {
 
   async function signOut() {
     if (!supabase) return
-    const { error } = await supabase.auth.signOut()
-    if (error) console.error('Could not sign out:', error.message)
+    setSigningOut(true)
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        notify(friendlyError(error), 'error')
+        return
+      }
+      setSignOutConfirmationOpen(false)
+    } catch (error) {
+      notify(friendlyError(error), 'error')
+    } finally {
+      setSigningOut(false)
+    }
   }
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
@@ -200,11 +213,22 @@ export function AppShell() {
           <Link className="icon-button shares-link" to="/shares" aria-label="Manage shared links" title="Manage shared links"><Share2 size={18} /></Link>
           {manageRoute && <label className="language-picker"><select value={language} disabled={!languageLoaded || !languageAvailable || savingLanguage} onChange={(event) => void changeLanguage(event.target.value as AppLanguage)} aria-label="Question language"><option value="en">English</option><option value="bn">বাংলা</option></select></label>}
           <Link className={`button manager-link ${manageRoute ? 'active' : ''}`} to="/manage" aria-label="Manage study notes" title="Manage study notes"><Settings2 size={16} /><span>{language === 'bn' ? 'ম্যানেজ' : 'Manage'}</span></Link>
-          <button className="icon-button" onClick={signOut} aria-label="Sign out" title="Sign out"><LogOut size={18} /></button>
+          <button className="icon-button" onClick={() => setSignOutConfirmationOpen(true)} aria-label="Sign out" title="Sign out"><LogOut size={18} /></button>
         </div>
       </header>
       {!languageAvailable && languageLoaded && <p className="settings-migration-notice" role="alert">Language settings need setup. Run <code>supabase/migrations/20261010_app_language.sql</code> in your Supabase SQL Editor, then reload.</p>}
       <Outlet context={{ language }} />
+      {signOutConfirmationOpen && <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !signingOut && setSignOutConfirmationOpen(false)}>
+        <section className="dialog-card logout-dialog" role="dialog" aria-modal="true" aria-labelledby="sign-out-title">
+          <span className="eyebrow">SIGN OUT</span>
+          <h2 id="sign-out-title">Sign out of Study Notes?</h2>
+          <p className="muted">You’ll need to sign in again to manage your notes.</p>
+          <div className="dialog-actions">
+            <button className="button subtle" type="button" onClick={() => setSignOutConfirmationOpen(false)} disabled={signingOut}>Cancel</button>
+            <button className="button primary" type="button" onClick={() => void signOut()} disabled={signingOut}>{signingOut ? 'Signing out…' : 'Sign out'}</button>
+          </div>
+        </section>
+      </div>}
     </div>
   )
 }

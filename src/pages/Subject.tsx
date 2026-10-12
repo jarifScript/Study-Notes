@@ -267,7 +267,11 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
               {questionTypes.map((type) => (
                 <section className="question-section" id={`section-${type.id}`} key={type.id}>
                   <div className="section-heading"><div><span className="eyebrow">{language === 'bn' ? 'প্রশ্নের ধরণ' : 'QUESTION TYPE'}</span><h2>{language === 'bn' ? type.banglaQuestionTitle : type.questionTitle} <span className="count-badge">{grouped[type.id].length}</span></h2></div>{manage && <button className="button outline-button" onClick={() => setQuestionForm({ initialType: type.id })}><Plus size={16} /> Add Question</button>}</div>
-                  {loadingQuestions ? <div className="section-empty section-loading">Loading questions…</div> : grouped[type.id].length ? <div className="question-list">{grouped[type.id].map((question) => <QuestionCard key={question.id} question={question} serialNumber={questionNumbers.get(question.id)} readOnly={!manage} onEdit={manage ? () => setQuestionForm({ initialType: type.id, question }) : undefined} onDelete={manage ? () => void deleteQuestion(question) : undefined} onMove={manage ? (direction) => void moveQuestion(question, direction) : undefined} />)}</div> : <div className="section-empty">{manage ? `No ${type.title.toLowerCase()} questions yet.` : `No ${type.title.toLowerCase()} questions in this chapter.`}</div>}
+                  {loadingQuestions ? <div className="section-empty section-loading">Loading questions…</div> : grouped[type.id].length ? <div className="question-list">{grouped[type.id].map((question) => <QuestionCard key={question.id} question={question} serialNumber={questionNumbers.get(question.id)} readOnly={!manage} onEdit={manage ? () => setQuestionForm({ initialType: type.id, question }) : undefined} onDelete={manage ? () => void deleteQuestion(question) : undefined} onMove={manage ? (direction) => void moveQuestion(question, direction) : undefined} />)}</div> : <div className="section-empty">{language === 'bn' ? ({
+                    very_short: 'এখনো কোনো অতি সংক্ষিপ্ত প্রশ্ন নেই।',
+                    short: 'এখনো কোনো সংক্ষিপ্ত প্রশ্ন নেই।',
+                    long: 'এখনো কোনো রচনামূলক প্রশ্ন নেই।',
+                  } satisfies Record<QuestionType, string>)[type.id] : manage ? `No ${type.title.toLowerCase()} questions yet.` : `No ${type.title.toLowerCase()} questions in this chapter.`}</div>}
                 </section>
               ))}
             </div>

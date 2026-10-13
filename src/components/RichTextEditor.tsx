@@ -3,10 +3,11 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
+import OrderedList from '@tiptap/extension-ordered-list'
 import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import { TableKit } from '@tiptap/extension-table/kit'
-import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Undo } from 'lucide-react'
+import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Underline as UnderlineIcon, Undo } from 'lucide-react'
 import { client } from '../lib/data'
 
 interface ImageUpload {
@@ -28,7 +29,19 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
   const [uploadError, setUploadError] = useState('')
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ orderedList: false }),
+      OrderedList.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            type: {
+              default: null,
+              parseHTML: (element) => element.getAttribute('type'),
+              renderHTML: (attributes) => attributes.type ? { type: attributes.type } : {},
+            },
+          }
+        },
+      }),
       Image.configure({ inline: false, allowBase64: false }),
       Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'] }),
       Subscript,
@@ -120,17 +133,41 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
   if (!editor) return <div className="editor-loading">Loading editor…</div>
 
   const isCellCentered = editor.isActive('tableCell', { align: 'center' }) || editor.isActive('tableHeader', { align: 'center' })
+  const isRomanList = editor.isActive('orderedList', { type: 'i' })
+  const isNumberedList = editor.isActive('orderedList') && !isRomanList
+
+  function toggleNumberedList() {
+    if (!editor.isActive('orderedList')) {
+      editor.chain().focus().toggleOrderedList().run()
+    } else if (isRomanList) {
+      editor.chain().focus().updateAttributes('orderedList', { type: null }).run()
+    } else {
+      editor.chain().focus().toggleOrderedList().run()
+    }
+  }
+
+  function toggleRomanList() {
+    if (!editor.isActive('orderedList')) {
+      editor.chain().focus().toggleOrderedList().updateAttributes('orderedList', { type: 'i' }).run()
+    } else if (isRomanList) {
+      editor.chain().focus().toggleOrderedList().run()
+    } else {
+      editor.chain().focus().updateAttributes('orderedList', { type: 'i' }).run()
+    }
+  }
 
   return (
     <div className="rich-editor">
       <div className="editor-toolbar" role="toolbar" aria-label="Answer formatting" onMouseDown={(event) => event.preventDefault()}>
         <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} aria-label="Bold" title="Bold" aria-pressed={editor.isActive('bold')} className={editor.isActive('bold') ? 'active' : ''}><Bold size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic" title="Italic" aria-pressed={editor.isActive('italic')} className={editor.isActive('italic') ? 'active' : ''}><Italic size={17} /></button>
+        <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline" title="Underline" aria-pressed={editor.isActive('underline')} className={editor.isActive('underline') ? 'active' : ''}><UnderlineIcon size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleSubscript().run()} aria-label="Subscript" title="Subscript" aria-pressed={editor.isActive('subscript')} className={editor.isActive('subscript') ? 'active' : ''}><SubscriptIcon size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleSuperscript().run()} aria-label="Superscript" title="Superscript" aria-pressed={editor.isActive('superscript')} className={editor.isActive('superscript') ? 'active' : ''}><SuperscriptIcon size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} aria-label="Heading" title="Heading" aria-pressed={editor.isActive('heading', { level: 2 })} className={editor.isActive('heading', { level: 2 }) ? 'active' : ''}><Heading2 size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bulleted list" title="Bulleted list" aria-pressed={editor.isActive('bulletList')} className={editor.isActive('bulletList') ? 'active' : ''}><List size={17} /></button>
-        <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list" title="Numbered list" aria-pressed={editor.isActive('orderedList')} className={editor.isActive('orderedList') ? 'active' : ''}><ListOrdered size={17} /></button>
+        <button type="button" onClick={toggleNumberedList} aria-label="Numbered list" title="Numbered list" aria-pressed={isNumberedList} className={isNumberedList ? 'active' : ''}><ListOrdered size={17} /></button>
+        <button type="button" onClick={toggleRomanList} aria-label="Roman numeral list" title="Roman numeral list" aria-pressed={isRomanList} className={isRomanList ? 'active' : ''}><span className="roman-list-icon" aria-hidden="true">i.</span></button>
         <button type="button" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} aria-label="Insert comparison grid" title="Insert comparison grid"><Table2 size={17} /></button>
         {editor.isActive('table') && <>
           <button type="button" onClick={() => editor.chain().focus().setCellAttribute('align', isCellCentered ? null : 'center').run()} aria-label="Center cell text" title="Center cell text" aria-pressed={isCellCentered} className={isCellCentered ? 'active' : ''}><AlignCenter size={17} /></button>

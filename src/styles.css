@@ -195,12 +195,14 @@ h1 { margin: 9px 0; font-size: clamp(27px, 5vw, 36px); letter-spacing: -.045em; 
 .editor-toolbar button { min-width: 44px; height: 44px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 6px; color: #636674; background: transparent; cursor: pointer; }
 .editor-toolbar button:hover, .editor-toolbar button.active { color: #5148dc; background: #f1f0ff; }
 .editor-toolbar button:disabled { opacity: .4; cursor: not-allowed; }
+.roman-list-icon { font-family: Georgia, serif; font-size: 14px; font-weight: 700; }
 .editor-toolbar button.table-adjust-button { min-width: 52px; display: flex; align-items: center; justify-content: center; gap: 3px; }
 .toolbar-spacer { flex: 1; }
 .rich-editor-area { min-height: 195px; padding: 13px 14px; outline: 0; color: #20242d; background: #fff; line-height: 1.65; overflow-wrap: anywhere; }
 .rich-editor-area > *:first-child { margin-top: 0; }
 .rich-editor-area ul, .answer-content ul { padding-left: 1.5em; list-style: disc; }
 .rich-editor-area ol, .answer-content ol { padding-left: 1.5em; list-style: decimal; }
+.rich-editor-area ol[type="i"], .answer-content ol[type="i"] { list-style: lower-roman; }
 .rich-editor-area ol li::marker, .answer-content ol li::marker { font-family: monospace; }
 .rich-editor-area table, .answer-content table { width: 100%; margin: 1em 0; border-collapse: collapse; table-layout: fixed; }
 .rich-editor-area th, .rich-editor-area td, .answer-content th, .answer-content td { min-width: 0; padding: 8px; border: 1px solid #b8bbc5; text-align: left; vertical-align: top; overflow-wrap: anywhere; }

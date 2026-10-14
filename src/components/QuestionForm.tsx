@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { client } from '../lib/data'
 import type { AppLanguage, Question, QuestionType } from '../types/database'
 import { questionTypes } from '../lib/data'
-import { RichTextEditor } from './RichTextEditor'
 import { VoiceInput } from './VoiceInput'
 import { useToast } from './Toast'
+
+const RichTextEditor = lazy(async () => ({ default: (await import('./RichTextEditor')).RichTextEditor }))
 
 interface QuestionFormProps {
   chapterId: string
@@ -231,7 +232,9 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
             {boardYears.map((year) => <li key={year}><span>{year}</span><button type="button" aria-label={`Remove ${year}`} onClick={() => setBoardYears((current) => current.filter((item) => item !== year))}>×</button></li>)}
           </ul>}
           <label className="voice-field-label answer-label">Answer <VoiceInput onText={(text) => insertAnswerText.current?.(text)} /></label>
-          <RichTextEditor value={answer} onChange={setAnswer} onUploadImage={uploadImage} onImageUrlsReady={setReadyForSave} onInsertTextRef={(insert) => { insertAnswerText.current = insert }} />
+          <Suspense fallback={<div className="editor-loading">Loading editor…</div>}>
+            <RichTextEditor value={answer} onChange={setAnswer} onUploadImage={uploadImage} onImageUrlsReady={setReadyForSave} onInsertTextRef={(insert) => { insertAnswerText.current = insert }} />
+          </Suspense>
           {error && <p className="form-error" role="alert">{error}</p>}
           {draftError && <p className="form-error" role="alert">{draftError}</p>}
         </div>

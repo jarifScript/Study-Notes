@@ -3,8 +3,29 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, MoreHorizontal, Pencil, Share2, Trash2 } from 'lucide-react'
 import type { Question, ShareScope } from '../types/database'
 import { client, friendlyError } from '../lib/data'
+import { orderedListStyleForType } from '../lib/richText'
 import { ShareDialog } from './ShareDialog'
 import { useToast } from './Toast'
+
+DOMPurify.addHook('beforeSanitizeAttributes', (node) => {
+  if (node.nodeName.toLowerCase() !== 'ol') return
+  const listStyle = orderedListStyleForType(node.getAttribute('type'))
+  if (listStyle) node.setAttribute('data-list-style', listStyle)
+})
+
+DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+  const tagName = node.nodeName.toLowerCase()
+  const value = data.attrValue
+
+  if (tagName === 'ol' && data.attrName === 'type' && /^(?:1|a|A|i|I)$/.test(value)) {
+    data.forceKeepAttr = true
+  } else if (tagName === 'ol' && data.attrName === 'start' && /^-?\d+$/.test(value) && Number.isSafeInteger(Number(value))) {
+    data.forceKeepAttr = true
+  } else if ((tagName === 'td' || tagName === 'th') && (data.attrName === 'colspan' || data.attrName === 'rowspan') &&
+    /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) >= (data.attrName === 'colspan' ? 1 : 0)) {
+    data.forceKeepAttr = true
+  }
+})
 
 export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove, readOnly = false, shareImage }: {
   question: Pick<Question, 'id' | 'type' | 'question' | 'answer' | 'board_years' | 'position'>
@@ -41,7 +62,7 @@ export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove,
           else notify(friendlyError(error), 'error')
         }
       }
-      if (active) setAnswer(DOMPurify.sanitize(html, { ADD_ATTR: ['target'], ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|storage:\/\/)/i }))
+      if (active) setAnswer(DOMPurify.sanitize(html, { ADD_ATTR: ['target'], ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|storage:\/\/|data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*)$/i }))
     }
     void resolveImages()
     return () => { active = false }

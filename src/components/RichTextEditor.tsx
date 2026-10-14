@@ -7,8 +7,11 @@ import OrderedList from '@tiptap/extension-ordered-list'
 import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import { TableKit } from '@tiptap/extension-table/kit'
-import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Underline as UnderlineIcon, Undo } from 'lucide-react'
+import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Underline as UnderlineIcon, Undo, Workflow } from 'lucide-react'
 import { client } from '../lib/data'
+import { orderedListStyleForType } from '../lib/richText'
+import { createFlowchart, FlowchartDialog, FlowchartExtension } from './Flowchart'
+import type { FlowchartData } from './Flowchart'
 
 interface ImageUpload {
   url: string
@@ -27,9 +30,13 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
   const fileRef = useRef<HTMLInputElement>(null)
   const imageMappings = useRef<ImageUpload[]>([])
   const [uploadError, setUploadError] = useState('')
+  const [flowchartDialog, setFlowchartDialog] = useState<{ chart: FlowchartData; position?: number } | null>(null)
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ orderedList: false }),
+      FlowchartExtension.configure({
+        onEdit: (chart, position) => setFlowchartDialog({ chart, position }),
+      }),
       OrderedList.extend({
         addAttributes() {
           return {
@@ -37,7 +44,14 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
             type: {
               default: null,
               parseHTML: (element) => element.getAttribute('type'),
-              renderHTML: (attributes) => attributes.type ? { type: attributes.type } : {},
+              renderHTML: (attributes) => {
+                if (!attributes.type) return {}
+                const listStyle = orderedListStyleForType(attributes.type)
+                return {
+                  type: attributes.type,
+                  ...(listStyle ? { 'data-list-style': listStyle } : {}),
+                }
+              },
             },
           }
         },
@@ -130,6 +144,20 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
     if (url && /^https?:\/\//i.test(url)) editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }
 
+  function saveFlowchart(chart: FlowchartData) {
+    if (!editor || !flowchartDialog) return
+    if (flowchartDialog.position === undefined) {
+      editor.chain().focus().insertContent({ type: 'studyFlowchart', attrs: { chart } }).run()
+    } else {
+      const position = flowchartDialog.position
+      editor.chain().focus().command(({ tr }) => {
+        tr.setNodeMarkup(position, undefined, { chart })
+        return true
+      }).run()
+    }
+    setFlowchartDialog(null)
+  }
+
   if (!editor) return <div className="editor-loading">Loading editor…</div>
 
   const isCellCentered = editor.isActive('tableCell', { align: 'center' }) || editor.isActive('tableHeader', { align: 'center' })
@@ -178,6 +206,7 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
         </>}
         <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} aria-label="Code block" title="Code block"><Code size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} aria-label="Quote" title="Quote"><Quote size={17} /></button>
+        <button type="button" onClick={() => setFlowchartDialog({ chart: createFlowchart() })} aria-label="Create flowchart" title="Create flowchart"><Workflow size={17} /></button>
         <button type="button" onClick={addLink} aria-label="Add link" title="Add link"><Link2 size={17} /></button>
         <button type="button" onClick={() => fileRef.current?.click()} aria-label="Upload image" title="Upload image"><ImagePlus size={17} /></button>
         <span className="toolbar-spacer" />
@@ -188,6 +217,11 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
       <EditorContent editor={editor} />
       {uploadError && <p className="form-error image-upload-error" role="alert">{uploadError}</p>}
       <p className="editor-hint">Paste, drop, or upload an image. Images are private and shown only in this question's shared links.</p>
+      {flowchartDialog && <FlowchartDialog
+        initial={flowchartDialog.position === undefined ? undefined : flowchartDialog.chart}
+        onClose={() => setFlowchartDialog(null)}
+        onSave={saveFlowchart}
+      />}
     </div>
   )
 }

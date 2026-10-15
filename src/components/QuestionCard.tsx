@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, MoreHorizontal, Pencil, Share2, Trash2 } from 'lucide-react'
 import type { Question, ShareScope } from '../types/database'
 import { client, friendlyError } from '../lib/data'
-import { orderedListStyleForType } from '../lib/richText'
+import { parseFlowchart, flowchartImageSource } from '../lib/flowchart'
+import { orderedListStyleForType, questionImagePath } from '../lib/richText'
 import { ShareDialog } from './ShareDialog'
 import { useToast } from './Toast'
 
@@ -46,8 +47,10 @@ export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove,
     let active = true
     async function resolveImages() {
       let html = question.answer
-      const paths = [...html.matchAll(/storage:\/\/([^"]+)/g)].map((match) => match[1])
-      for (const path of paths) {
+      const sources = [...html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((match) => match[1])
+      for (const source of sources) {
+        const path = questionImagePath(source)
+        if (!path) continue
         try {
           const url = shareImage
             ? await shareImage(path)
@@ -55,14 +58,31 @@ export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove,
               if (error) throw error
               return data.signedUrl
             })
-          if (url) html = html.replaceAll(`storage://${path}`, url)
+          if (url) html = html.replaceAll(source, url)
         } catch (error) {
           if (active) setImageError(true)
           if (readOnly) console.error('Could not load shared question image:', error)
           else notify(friendlyError(error), 'error')
         }
       }
-      if (active) setAnswer(DOMPurify.sanitize(html, { ADD_ATTR: ['target'], ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|storage:\/\/|data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*)$/i }))
+      if (!active) return
+      const sanitized = DOMPurify.sanitize(html, {
+        ADD_ATTR: ['target'],
+        ALLOWED_URI_REGEXP: /^(?:(?:https?:\/\/|mailto:|storage:\/\/).+|data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*)$/i,
+      })
+      const template = document.createElement('template')
+      template.innerHTML = sanitized
+      for (const container of template.content.querySelectorAll('[data-study-flowchart]')) {
+        const image = container.querySelector<HTMLImageElement>('img.flowchart-image')
+        if (!image) continue
+        const chart = parseFlowchart(container.getAttribute('data-study-flowchart'))
+        if (!chart) {
+          console.error('Could not refresh saved flowchart connectors: chart data is invalid.')
+          continue
+        }
+        image.src = flowchartImageSource(chart)
+      }
+      setAnswer(template.innerHTML)
     }
     void resolveImages()
     return () => { active = false }

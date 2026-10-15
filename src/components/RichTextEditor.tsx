@@ -9,9 +9,10 @@ import Superscript from '@tiptap/extension-superscript'
 import { TableKit } from '@tiptap/extension-table/kit'
 import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Underline as UnderlineIcon, Undo, Workflow } from 'lucide-react'
 import { client } from '../lib/data'
-import { orderedListStyleForType } from '../lib/richText'
-import { createFlowchart, FlowchartDialog, FlowchartExtension } from './Flowchart'
-import type { FlowchartData } from './Flowchart'
+import { createFlowchart } from '../lib/flowchart'
+import type { FlowchartData } from '../lib/flowchart'
+import { orderedListStyleForType, questionImagePath } from '../lib/richText'
+import { FlowchartDialog, FlowchartExtension } from './Flowchart'
 
 interface ImageUpload {
   url: string
@@ -112,12 +113,15 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
 
   useEffect(() => {
     if (!editor) return
-    const paths = [...value.matchAll(/src="storage:\/\/([^"]+)"/g)].map((match) => match[1])
-    if (!paths.length) {
+    const sources = [...value.matchAll(/src="([^"]+)"/g)]
+      .map((match) => ({ source: match[1], path: questionImagePath(match[1]) }))
+      .filter((image): image is { source: string; path: string } => Boolean(image.path))
+    if (!sources.length) {
       if (value !== editor.getHTML()) editor.commands.setContent(value || '', { emitUpdate: false })
       return
     }
     let cancelled = false
+    const paths = [...new Set(sources.map((image) => image.path))]
     void Promise.all(paths.map(async (path) => {
       const { data, error } = await client().storage.from('question-images').createSignedUrl(path, 3600)
       if (error) throw error
@@ -127,8 +131,15 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
       imageMappings.current = mappings
       onImageUrlsReady(mappings)
       let html = value
-      for (const item of mappings) html = html.replaceAll(`storage://${item.path}`, item.url)
+      let canonicalHtml = value
+      for (const image of sources) {
+        const item = mappings.find((mapping) => mapping.path === image.path)
+        if (!item) continue
+        html = html.replaceAll(image.source, item.url)
+        canonicalHtml = canonicalHtml.replaceAll(image.source, `storage://${image.path}`)
+      }
       if (html !== editor.getHTML()) editor.commands.setContent(html || '', { emitUpdate: false })
+      if (canonicalHtml !== value) onChange(canonicalHtml)
     }).catch((error: unknown) => console.error('Could not load existing answer images:', error))
     return () => { cancelled = true }
   }, [editor, onImageUrlsReady])

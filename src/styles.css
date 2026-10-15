@@ -211,8 +211,8 @@ h1 { margin: 9px 0; font-size: clamp(27px, 5vw, 36px); letter-spacing: -.045em; 
 .flowchart-node-view { position: relative; padding: 8px; border: 1px dashed #d8d6eb; border-radius: 10px; }
 .flowchart-diagram { display: block; width: 100%; min-width: 520px; height: auto; color: #45465a; font-family: inherit; }
 .flowchart-image { display: block; width: 100%; min-width: 520px; height: auto; }
-.flowchart-edge path { fill: none; stroke: currentColor; stroke-width: 1.6; }
-.flowchart-edge marker path { fill: currentColor; stroke: none; }
+.flowchart-edge path { fill: none; stroke: #77798b; stroke-width: 2.5; }
+.flowchart-edge marker path { fill: #77798b; stroke: none; }
 .flowchart-edge text { fill: currentColor; stroke: none; font-size: 12px; text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
 .flowchart-node rect, .flowchart-node polygon, .flowchart-node circle { fill: #fff; stroke: #55566a; stroke-width: 1.5; }
 .flowchart-node text { fill: currentColor; stroke: none; font-size: 14px; }
@@ -466,7 +466,8 @@ h1 { margin: 9px 0; font-size: clamp(27px, 5vw, 36px); letter-spacing: -.045em; 
   .flowchart-node rect, .flowchart-node polygon, .flowchart-node circle { fill: #1d1e25; stroke: #a6a8b5; }
   .flowchart-edit-button { color: #c1bdff; background: #17181e; border-color: #454650; }
   .flowchart-node-fields label { color: #c1c2ce; }
-  .flowchart-node-fields input, .flowchart-node-fields select { color: #ecedf4; background: #17181e; border-color: #393a44; }
+  .flowchart-dialog .flowchart-node-fields input, .flowchart-dialog .flowchart-node-fields select { color: #f4f4fa; background: #252630; border-color: #555764; -webkit-text-fill-color: #f4f4fa; }
+  .flowchart-dialog .flowchart-node-fields input::placeholder { color: #aeb0bd; opacity: 1; -webkit-text-fill-color: #aeb0bd; }
   .flowchart-dialog > .dialog-header, .flowchart-dialog > .dialog-footer { border-color: #383943; }
   .flowchart-node-row, .flowchart-preview { border-color: #353640; }
   .flowchart-edge text { stroke: #1d1e25; }

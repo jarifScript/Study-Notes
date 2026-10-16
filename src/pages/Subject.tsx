@@ -10,6 +10,26 @@ import { ShareDialog } from '../components/ShareDialog'
 import { useToast } from '../components/Toast'
 
 type Dialog = { title: string; placeholder: string; initialValue?: string; save: (name: string) => Promise<void> } | null
+type ActiveQuestionForm = { route: string; chapterId: string; initialType: QuestionType; questionId?: string }
+
+const ACTIVE_QUESTION_FORM_KEY = 'study-notes:active-question-form'
+
+function readActiveQuestionForm(): ActiveQuestionForm | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_QUESTION_FORM_KEY)
+    if (!raw) return null
+    const value = JSON.parse(raw) as Partial<ActiveQuestionForm>
+    const validType = value.initialType === 'very_short' || value.initialType === 'short' || value.initialType === 'long'
+    if (typeof value.route !== 'string' || typeof value.chapterId !== 'string' || !validType ||
+      (value.questionId !== undefined && typeof value.questionId !== 'string')) {
+      throw new Error('Invalid saved question editor state.')
+    }
+    return value as ActiveQuestionForm
+  } catch (error) {
+    console.error('Could not restore the open question editor:', error)
+    return null
+  }
+}
 
 export function SubjectPage({ manage = false }: { manage?: boolean }) {
   const { language } = useOutletContext<{ language: AppLanguage }>()
@@ -29,6 +49,7 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
   const [chapterSidebarCollapsed, setChapterSidebarCollapsed] = useState(false)
   const [activeType, setActiveType] = useState<QuestionType>('very_short')
   const navigationTarget = useRef<QuestionType | null>(null)
+  const restoredQuestionForm = useRef('')
   const notify = useToast()
   const chapterId = params.get('chapter') ?? ''
 
@@ -81,6 +102,35 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
     })
     return () => { active = false }
   }, [chapterId, chapters, loading, notify])
+
+  useEffect(() => {
+    if (!manage || loading || !subject || !chapters.some((chapter) => chapter.id === chapterId)) return
+    const savedForm = readActiveQuestionForm()
+    if (!savedForm || savedForm.route !== location.pathname || savedForm.chapterId !== chapterId) return
+    const key = `${savedForm.route}:${savedForm.chapterId}:${savedForm.questionId ?? savedForm.initialType}`
+    if (restoredQuestionForm.current === key) return
+    if (!savedForm.questionId) {
+      restoredQuestionForm.current = key
+      setQuestionForm({ initialType: savedForm.initialType })
+      return
+    }
+    let active = true
+    listQuestions(savedForm.chapterId).then((rows) => {
+      if (!active) return
+      const question = rows.find((row) => row.id === savedForm.questionId)
+      if (question) {
+        restoredQuestionForm.current = key
+        setQuestionForm({ initialType: question.type, question })
+      }
+      else {
+        localStorage.removeItem(ACTIVE_QUESTION_FORM_KEY)
+        notify('The question being edited no longer exists. Its saved draft was not restored.', 'error')
+      }
+    }).catch((error: unknown) => {
+      if (active) notify(friendlyError(error), 'error')
+    })
+    return () => { active = false }
+  }, [chapterId, chapters, location.pathname, loading, manage, notify, subject])
 
   useEffect(() => {
     navigationTarget.current = null
@@ -212,6 +262,30 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
   ), [grouped])
   const activeChapter = chapters.find((chapter) => chapter.id === chapterId)
 
+  function openQuestionForm(initialType: QuestionType, question?: Question) {
+    try {
+      localStorage.setItem(ACTIVE_QUESTION_FORM_KEY, JSON.stringify({
+        route: location.pathname,
+        chapterId,
+        initialType,
+        ...(question ? { questionId: question.id } : {}),
+      } satisfies ActiveQuestionForm))
+    } catch (error) {
+      console.error('Could not remember the open question editor:', error)
+      notify('This browser could not remember which question editor to reopen.', 'error')
+    }
+    setQuestionForm({ initialType, ...(question ? { question } : {}) })
+  }
+
+  function closeQuestionForm() {
+    try {
+      localStorage.removeItem(ACTIVE_QUESTION_FORM_KEY)
+    } catch (error) {
+      console.error('Could not clear the saved question editor state:', error)
+    }
+    setQuestionForm(null)
+  }
+
   return (
     <div className={`workspace subject-workspace ${chapterSidebarCollapsed ? 'chapter-sidebar-collapsed' : ''}`}>
       <aside className={`side-panel chapter-panel ${drawerOpen ? 'drawer-open' : ''}`}>
@@ -266,8 +340,8 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
             <div className="question-sections">
               {questionTypes.map((type) => (
                 <section className="question-section" id={`section-${type.id}`} key={type.id}>
-                  <div className="section-heading"><div><span className="eyebrow">{language === 'bn' ? 'প্রশ্নের ধরণ' : 'QUESTION TYPE'}</span><h2>{language === 'bn' ? type.banglaQuestionTitle : type.questionTitle} <span className="count-badge">{grouped[type.id].length}</span></h2></div>{manage && <button className="button outline-button" onClick={() => setQuestionForm({ initialType: type.id })}><Plus size={16} /> Add Question</button>}</div>
-                  {loadingQuestions ? <div className="section-empty section-loading">Loading questions…</div> : grouped[type.id].length ? <div className="question-list">{grouped[type.id].map((question) => <QuestionCard key={question.id} question={question} serialNumber={questionNumbers.get(question.id)} readOnly={!manage} onEdit={manage ? () => setQuestionForm({ initialType: type.id, question }) : undefined} onDelete={manage ? () => void deleteQuestion(question) : undefined} onMove={manage ? (direction) => void moveQuestion(question, direction) : undefined} />)}</div> : <div className="section-empty">{language === 'bn' ? ({
+                  <div className="section-heading"><div><span className="eyebrow">{language === 'bn' ? 'প্রশ্নের ধরণ' : 'QUESTION TYPE'}</span><h2>{language === 'bn' ? type.banglaQuestionTitle : type.questionTitle} <span className="count-badge">{grouped[type.id].length}</span></h2></div>{manage && <button className="button outline-button" onClick={() => openQuestionForm(type.id)}><Plus size={16} /> Add Question</button>}</div>
+                  {loadingQuestions ? <div className="section-empty section-loading">Loading questions…</div> : grouped[type.id].length ? <div className="question-list">{grouped[type.id].map((question) => <QuestionCard key={question.id} question={question} serialNumber={questionNumbers.get(question.id)} readOnly={!manage} onEdit={manage ? () => openQuestionForm(type.id, question) : undefined} onDelete={manage ? () => void deleteQuestion(question) : undefined} onMove={manage ? (direction) => void moveQuestion(question, direction) : undefined} />)}</div> : <div className="section-empty">{language === 'bn' ? ({
                     very_short: 'এখনো কোনো অতি সংক্ষিপ্ত প্রশ্ন নেই।',
                     short: 'এখনো কোনো সংক্ষিপ্ত প্রশ্ন নেই।',
                     long: 'এখনো কোনো রচনামূলক প্রশ্ন নেই।',
@@ -279,7 +353,7 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
         )}
       </main>
       {dialog && <NameDialog title={dialog.title} placeholder={dialog.placeholder} initialValue={dialog.initialValue} onSave={dialog.save} onClose={() => setDialog(null)} />}
-      {questionForm && <QuestionForm chapterId={chapterId} initial={questionForm.question} initialType={questionForm.initialType} language={language} onClose={() => setQuestionForm(null)} onSaved={async () => { setQuestions(await listQuestions(chapterId)); notify('Question saved.') }} />}
+      {questionForm && <QuestionForm chapterId={chapterId} initial={questionForm.question} initialType={questionForm.initialType} language={language} onClose={closeQuestionForm} onSaved={async () => { setQuestions(await listQuestions(chapterId)); notify('Question saved.') }} />}
       {sharing && <ShareDialog scopeType={sharing.scopeType} scopeId={sharing.scopeId} title={sharing.title} onClose={() => setSharing(null)} />}
     </div>
   )

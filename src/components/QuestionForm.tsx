@@ -18,6 +18,7 @@ interface QuestionFormProps {
 }
 
 interface QuestionDraft {
+  id?: string
   type: QuestionType
   question: string
   answer: string
@@ -35,9 +36,10 @@ function readDraft(key: string): { draft: QuestionDraft | null; error: string } 
     const validImages = (images: unknown): images is { path: string; url: string }[] =>
       Array.isArray(images) && images.every((image) =>
         image && typeof image.path === 'string' && typeof image.url === 'string')
+    const validId = value.id === undefined || typeof value.id === 'string'
     const validBoardYears = value.boardYears === undefined ||
       (Array.isArray(value.boardYears) && value.boardYears.every((year) => Number.isInteger(year) && year >= 1900 && year <= 2100))
-    if (!validType || typeof value.question !== 'string' || typeof value.answer !== 'string' || !validBoardYears ||
+    if (!validType || typeof value.question !== 'string' || typeof value.answer !== 'string' || !validId || !validBoardYears ||
       !validImages(value.uploaded) || !validImages(value.readyForSave)) {
       return { draft: null, error: 'Your saved draft could not be restored. You can still enter and save your notes.' }
     }
@@ -48,9 +50,9 @@ function readDraft(key: string): { draft: QuestionDraft | null; error: string } 
 }
 
 export function QuestionForm({ chapterId, initial, initialType, language, onClose, onSaved }: QuestionFormProps) {
-  const idRef = useRef(initial?.id ?? crypto.randomUUID())
   const draftKey = `study-notes:question-draft:${chapterId}:${initial?.id ?? `new:${initialType}`}`
   const [draftState] = useState(() => readDraft(draftKey))
+  const idRef = useRef(draftState.draft?.id ?? initial?.id ?? crypto.randomUUID())
   const [type, setType] = useState<QuestionType>(draftState.draft?.type ?? initial?.type ?? initialType)
   const [question, setQuestion] = useState(draftState.draft?.question ?? initial?.question ?? '')
   const [answer, setAnswer] = useState(draftState.draft?.answer ?? initial?.answer ?? '')
@@ -64,18 +66,42 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
   const questionRef = useRef<HTMLTextAreaElement>(null)
   const insertAnswerText = useRef<((text: string) => void) | null>(null)
   const committed = useRef(false)
+  const draftRef = useRef<QuestionDraft>({
+    id: idRef.current,
+    type: draftState.draft?.type ?? initial?.type ?? initialType,
+    question: draftState.draft?.question ?? initial?.question ?? '',
+    answer: draftState.draft?.answer ?? initial?.answer ?? '',
+    boardYears: draftState.draft?.boardYears ?? initial?.board_years ?? [],
+    uploaded: draftState.draft?.uploaded ?? [],
+    readyForSave: draftState.draft?.readyForSave ?? [],
+  })
   const notify = useToast()
 
-  useEffect(() => {
-    let draftAnswer = answer
-    for (const image of readyForSave) draftAnswer = draftAnswer.replaceAll(image.url, `storage://${image.path}`)
+  function persistDraft(patch: Partial<QuestionDraft> = {}) {
+    const next = { ...draftRef.current, ...patch }
+    draftRef.current = next
+    let draftAnswer = next.answer
+    for (const image of next.readyForSave) draftAnswer = draftAnswer.replaceAll(image.url, `storage://${image.path}`)
     try {
-      localStorage.setItem(draftKey, JSON.stringify({ type, question, answer: draftAnswer, boardYears, uploaded, readyForSave }))
+      localStorage.setItem(draftKey, JSON.stringify({ ...next, answer: draftAnswer }))
       setDraftError('')
     } catch {
       setDraftError('Your draft could not be saved in this browser. Keep this page open until you save your question.')
     }
-  }, [answer, boardYears, draftKey, question, readyForSave, type, uploaded])
+  }
+
+  useEffect(() => {
+    function saveOnPageExit() {
+      if (!committed.current) persistDraft()
+    }
+    persistDraft()
+    window.addEventListener('pagehide', saveOnPageExit)
+    document.addEventListener('visibilitychange', saveOnPageExit)
+    return () => {
+      window.removeEventListener('pagehide', saveOnPageExit)
+      document.removeEventListener('visibilitychange', saveOnPageExit)
+    }
+  }, [draftKey])
 
   async function uploadImage(file: File) {
     if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
@@ -91,7 +117,9 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
       throw urlError
     }
     const uploadedImage = { path, url: data.signedUrl }
-    setUploaded((current) => [...current, uploadedImage])
+    const nextUploaded = [...draftRef.current.uploaded, uploadedImage]
+    setUploaded(nextUploaded)
+    persistDraft({ uploaded: nextUploaded })
     return uploadedImage
   }
 
@@ -185,13 +213,18 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
   function insertQuestionText(text: string) {
     const input = questionRef.current
     if (!input) {
-      setQuestion((current) => `${current}${current ? ' ' : ''}${text}`)
+      const current = draftRef.current.question
+      const next = `${current}${current ? ' ' : ''}${text}`
+      setQuestion(next)
+      persistDraft({ question: next })
       return
     }
     const start = input.selectionStart
     const end = input.selectionEnd
-    const next = `${question.slice(0, start)}${text} ${question.slice(end)}`
+    const current = draftRef.current.question
+    const next = `${current.slice(0, start)}${text} ${current.slice(end)}`
     setQuestion(next)
+    persistDraft({ question: next })
     requestAnimationFrame(() => input.setSelectionRange(start + text.length + 1, start + text.length + 1))
   }
 
@@ -205,7 +238,9 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
       setError('That board year has already been added.')
       return
     }
-    setBoardYears((current) => [...current, year].sort((a, b) => a - b))
+    const nextYears = [...draftRef.current.boardYears, year].sort((a, b) => a - b)
+    setBoardYears(nextYears)
+    persistDraft({ boardYears: nextYears })
     setYearInput('')
     setError('')
   }
@@ -215,9 +250,17 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
       <form className="question-dialog" onSubmit={(event) => void save(event)} role="dialog" aria-modal="true" aria-labelledby="question-form-title">
         <header className="dialog-header"><div><span className="eyebrow">{initial ? 'EDIT QUESTION' : 'NEW QUESTION'}</span><h2 id="question-form-title">{initial ? 'Update your notes' : 'Add a question'}</h2></div><button className="icon-button" type="button" onClick={() => void close()} disabled={saving} aria-label="Close"><X size={19} /></button></header>
         <div className="question-form-body">
-          <label>Question type<select value={type} onChange={(event) => setType(event.target.value as QuestionType)}>{questionTypes.map((item) => <option key={item.id} value={item.id}>{language === 'bn' ? item.banglaTitle : item.title}</option>)}</select></label>
+          <label>Question type<select value={type} onChange={(event) => {
+            const nextType = event.target.value as QuestionType
+            setType(nextType)
+            persistDraft({ type: nextType })
+          }}>{questionTypes.map((item) => <option key={item.id} value={item.id}>{language === 'bn' ? item.banglaTitle : item.title}</option>)}</select></label>
           <label className="voice-field-label">Question <VoiceInput onText={insertQuestionText} /></label>
-          <textarea ref={questionRef} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Write your question…" rows={3} maxLength={10000} required />
+          <textarea ref={questionRef} value={question} onChange={(event) => {
+            const nextQuestion = event.target.value
+            setQuestion(nextQuestion)
+            persistDraft({ question: nextQuestion })
+          }} placeholder="Write your question…" rows={3} maxLength={10000} required />
           <label htmlFor="board-year-input">Board years</label>
           <div className="board-year-entry">
             <input id="board-year-input" type="number" inputMode="numeric" min="1900" max="2100" step="1" value={yearInput} onChange={(event) => setYearInput(event.target.value)} onKeyDown={(event) => {
@@ -229,11 +272,21 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
             <button className="button outline-button" type="button" onClick={addBoardYear}>Add year</button>
           </div>
           {boardYears.length > 0 && <ul className="board-year-list" aria-label="Added board years">
-            {boardYears.map((year) => <li key={year}><span>{year}</span><button type="button" aria-label={`Remove ${year}`} onClick={() => setBoardYears((current) => current.filter((item) => item !== year))}>×</button></li>)}
+            {boardYears.map((year) => <li key={year}><span>{year}</span><button type="button" aria-label={`Remove ${year}`} onClick={() => {
+              const nextYears = draftRef.current.boardYears.filter((item) => item !== year)
+              setBoardYears(nextYears)
+              persistDraft({ boardYears: nextYears })
+            }}>×</button></li>)}
           </ul>}
           <label className="voice-field-label answer-label">Answer <VoiceInput onText={(text) => insertAnswerText.current?.(text)} /></label>
           <Suspense fallback={<div className="editor-loading">Loading editor…</div>}>
-            <RichTextEditor value={answer} onChange={setAnswer} onUploadImage={uploadImage} onImageUrlsReady={setReadyForSave} onInsertTextRef={(insert) => { insertAnswerText.current = insert }} />
+            <RichTextEditor value={answer} onChange={(nextAnswer) => {
+              setAnswer(nextAnswer)
+              persistDraft({ answer: nextAnswer })
+            }} onUploadImage={uploadImage} onImageUrlsReady={(images) => {
+              setReadyForSave(images)
+              persistDraft({ readyForSave: images })
+            }} onInsertTextRef={(insert) => { insertAnswerText.current = insert }} />
           </Suspense>
           {error && <p className="form-error" role="alert">{error}</p>}
           {draftError && <p className="form-error" role="alert">{draftError}</p>}

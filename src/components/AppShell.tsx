@@ -10,6 +10,21 @@ type SubjectSuggestion = { kind: 'subject'; id: string; name: string }
 type QuestionSuggestion = { kind: 'question'; id: string; type: QuestionType; question: string; answer: string; chapter_id: string }
 type SearchSuggestion = SubjectSuggestion | QuestionSuggestion
 
+const LAST_ROUTE_KEY = 'study-notes:last-route'
+const LAST_SCROLL_KEY = 'study-notes:last-scroll'
+
+function readLastRoute() {
+  try {
+    const route = localStorage.getItem(LAST_ROUTE_KEY)
+    if (!route || route.startsWith('//') ||
+      !/^\/(?:$|[?#]|subject\/|manage(?:\/|[?#]|$)|shares(?:[?#]|$)|search(?:[?#]|$))/.test(route)) return null
+    return route
+  } catch (error) {
+    console.error('Could not restore the last Study Notes page:', error)
+    return null
+  }
+}
+
 export function AppShell() {
   const [search, setSearch] = useState('')
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([])
@@ -22,12 +37,105 @@ export function AppShell() {
   const [signOutConfirmationOpen, setSignOutConfirmationOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const searchBox = useRef<HTMLDivElement>(null)
+  const initialRouteChecked = useRef(false)
+  const initialPageRestorationPending = useRef(true)
+  const restoreTarget = useRef<string | null>(null)
+  const currentRoute = useRef('')
   const navigate = useNavigate()
   const location = useLocation()
   const notify = useToast()
   const subjectRoute = location.pathname.match(/^\/(?:manage\/)?subject\/[^/]+/)?.[0] ?? ''
   const manageRoute = location.pathname.startsWith('/manage')
   const chapterId = new URLSearchParams(location.search).get('chapter')
+
+  useEffect(() => {
+    const route = `${location.pathname}${location.search}${location.hash}`
+    if (!initialRouteChecked.current) {
+      initialRouteChecked.current = true
+      if (location.pathname === '/') {
+        restoreTarget.current = readLastRoute()
+      }
+    }
+    if (restoreTarget.current) {
+      if (location.pathname === '/' && route !== restoreTarget.current) {
+        navigate(restoreTarget.current, { replace: true })
+        return
+      }
+      restoreTarget.current = null
+    }
+    const shouldRestoreScroll = initialPageRestorationPending.current
+    currentRoute.current = route
+    try {
+      localStorage.setItem(LAST_ROUTE_KEY, route)
+    } catch (error) {
+      console.error('Could not save the last Study Notes page:', error)
+    }
+    if (!shouldRestoreScroll) return
+
+    let savedScroll = 0
+    try {
+      const saved = JSON.parse(localStorage.getItem(LAST_SCROLL_KEY) ?? 'null') as { route?: unknown; y?: unknown } | null
+      if (saved?.route === route && typeof saved.y === 'number' && Number.isFinite(saved.y) && saved.y > 0) {
+        savedScroll = saved.y
+      }
+    } catch (error) {
+      console.error('Could not restore the last page position:', error)
+    }
+    if (!savedScroll) {
+      initialPageRestorationPending.current = false
+      return
+    }
+
+    let attempts = 0
+    let timer = 0
+    const restore = () => {
+      window.scrollTo(0, savedScroll)
+      attempts += 1
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight
+      if ((maxScroll >= savedScroll && window.scrollY >= savedScroll) || attempts >= 60) {
+        initialPageRestorationPending.current = false
+        return
+      }
+      timer = window.setTimeout(restore, 100)
+    }
+    timer = window.setTimeout(restore, 0)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [location.hash, location.pathname, location.search, navigate])
+
+  useEffect(() => {
+    let timer = 0
+    function saveScroll() {
+      try {
+        localStorage.setItem(LAST_SCROLL_KEY, JSON.stringify({
+          route: currentRoute.current,
+          y: window.scrollY,
+        }))
+      } catch (error) {
+        console.error('Could not save the last page position:', error)
+      }
+    }
+    function scheduleScrollSave() {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(saveScroll, 250)
+    }
+    function saveWhenHidden() {
+      if (document.visibilityState === 'hidden') {
+        window.clearTimeout(timer)
+        saveScroll()
+      }
+    }
+    window.addEventListener('scroll', scheduleScrollSave, { passive: true })
+    window.addEventListener('pagehide', saveScroll)
+    document.addEventListener('visibilitychange', saveWhenHidden)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('scroll', scheduleScrollSave)
+      window.removeEventListener('pagehide', saveScroll)
+      document.removeEventListener('visibilitychange', saveWhenHidden)
+    }
+  }, [])
 
   useEffect(() => {
     let active = true

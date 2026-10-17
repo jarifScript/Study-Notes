@@ -1,5 +1,6 @@
 export type FlowchartShape = 'start' | 'process' | 'decision' | 'connector' | 'end'
 export type FlowchartDirection = 'up' | 'down' | 'left' | 'right'
+export type FlowchartArrow = 'forward' | 'reverse' | 'both' | 'none'
 
 export interface FlowchartNodeData {
   id: string
@@ -21,7 +22,10 @@ export interface FlowchartConnectionData {
   fromId: string
   toId: string
   branchLabel: string
-  direction: FlowchartDirection
+  fromSide: FlowchartDirection
+  toSide: FlowchartDirection
+  arrow: FlowchartArrow
+  waypoints?: { x: number; y: number }[]
 }
 
 interface PositionedNode {
@@ -40,6 +44,13 @@ export const directionLabels: Record<FlowchartDirection, string> = {
   left: 'Left',
   right: 'Right',
 }
+export const arrowLabels: Record<FlowchartArrow, string> = {
+  forward: 'Arrow to target',
+  reverse: 'Arrow to source',
+  both: 'Arrows both ways',
+  none: 'No arrowhead',
+}
+export const flowchartArrows: FlowchartArrow[] = ['forward', 'reverse', 'both', 'none']
 export const shapeLabels: Record<FlowchartShape, string> = {
   start: 'Start',
   process: 'Process',
@@ -109,12 +120,32 @@ export function parseFlowchart(value: string | null): FlowchartData | null {
         typeof connection.toId === 'string' && ids.has(connection.toId) &&
         connection.fromId !== connection.toId &&
         typeof connection.branchLabel === 'string' && connection.branchLabel.length <= 100 &&
-        (connection.direction === undefined || (typeof connection.direction === 'string' && flowchartDirections.includes(connection.direction as FlowchartDirection)))
+        (connection.direction === undefined || (typeof connection.direction === 'string' && flowchartDirections.includes(connection.direction as FlowchartDirection))) &&
+        (connection.fromSide === undefined || (typeof connection.fromSide === 'string' && flowchartDirections.includes(connection.fromSide as FlowchartDirection))) &&
+        (connection.toSide === undefined || (typeof connection.toSide === 'string' && flowchartDirections.includes(connection.toSide as FlowchartDirection))) &&
+        (connection.arrow === undefined || (typeof connection.arrow === 'string' && flowchartArrows.includes(connection.arrow as FlowchartArrow))) &&
+        (connection.waypoints === undefined || (Array.isArray(connection.waypoints) && connection.waypoints.length <= 100 &&
+          connection.waypoints.every((point) => !!point && typeof point === 'object' &&
+            typeof point.x === 'number' && Number.isFinite(point.x) && Math.abs(point.x) <= 100000 &&
+            typeof point.y === 'number' && Number.isFinite(point.y) && Math.abs(point.y) <= 100000)))
     })
     if (!validConnections) return null
     const validFlowchartConnections = rawConnections.map((value) => {
-      const connection = value as FlowchartConnectionData
-      return { ...connection, direction: connection.direction ?? 'up' }
+      const connection = value as FlowchartConnectionData & { direction?: FlowchartDirection }
+      const direction = connection.direction ?? 'up'
+      const fromSide = connection.fromSide ?? ({
+        up: 'down',
+        down: 'up',
+        left: 'right',
+        right: 'left',
+      } as const)[direction]
+      const toSide = connection.toSide ?? ({
+        up: 'down',
+        down: 'up',
+        left: 'right',
+        right: 'left',
+      } as const)[direction]
+      return { ...connection, fromSide, toSide, arrow: connection.arrow ?? 'forward' }
     })
     if (new Set(validFlowchartConnections.map((connection) => connection.id)).size !== validFlowchartConnections.length) return null
     const visited = new Set<string>()
@@ -250,65 +281,175 @@ export function flowchartEdgePath(parent: PositionedNode, child: PositionedNode)
   }
 }
 
-function segmentIntersectsNode(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  node: PositionedNode,
-): boolean {
-  const left = node.x - node.width / 2
-  const right = node.x + node.width / 2
-  const top = node.y - node.height / 2
-  const bottom = node.y + node.height / 2
-  if (y1 === y2) return y1 > top && y1 < bottom && Math.max(Math.min(x1, x2), left) < Math.min(Math.max(x1, x2), right)
-  if (x1 === x2) return x1 > left && x1 < right && Math.max(Math.min(y1, y2), top) < Math.min(Math.max(y1, y2), bottom)
-  return false
-}
-
 export function flowchartConnectionPath(
   source: PositionedNode,
   target: PositionedNode,
   nodes: PositionedNode[],
-  direction: FlowchartDirection,
-): { path: string; labelX: number; labelY: number } {
-  const vertical = direction === 'up' || direction === 'down'
-  const forward = direction === 'down' || direction === 'right'
-  const startX = source.x + (!vertical ? (forward ? source.width : -source.width) / 2 : 0)
-  const startY = source.y + (vertical ? (forward ? source.height : -source.height) / 2 : 0)
-  const endX = target.x + (!vertical ? (forward ? -target.width : target.width) / 2 : 0)
-  const endY = target.y + (vertical ? (forward ? -target.height : target.height) / 2 : 0)
-  const startAxis = vertical ? startY : startX
-  const endAxis = vertical ? endY : endX
-  const axisDistance = endAxis - startAxis
-  const minAxis = Math.min(startAxis, endAxis)
-  const maxAxis = Math.max(startAxis, endAxis)
-  const midpoint = (startAxis + endAxis) / 2
-  const offsets = [0, ...Array.from({ length: 12 }, (_, index) => (index + 1) * 16).flatMap((offset) => [offset, -offset])]
-  const candidates = axisDistance === 0 ? [midpoint] : offsets
-    .map((offset) => midpoint + offset)
-    .filter((axis) => axis > minAxis + 2 && axis < maxAxis - 2)
-  const ranked = candidates.map((axis) => {
-    const points: [number, number][] = vertical
-      ? [[startX, startY], [startX, axis], [endX, axis], [endX, endY]]
-      : [[startX, startY], [axis, startY], [axis, endY], [endX, endY]]
-    let collisions = 0
-    let length = 0
-    for (let index = 1; index < points.length; index++) {
-      const [x1, y1] = points[index - 1]
-      const [x2, y2] = points[index]
-      length += Math.abs(x1 - x2) + Math.abs(y1 - y2)
-      collisions += nodes.filter((node) => node !== source && node !== target)
-        .filter((node) => segmentIntersectsNode(x1, y1, x2, y2, node)).length
+  fromSide: FlowchartDirection,
+  toSide: FlowchartDirection,
+  waypoints: { x: number; y: number }[] = [],
+  originX = 0,
+  originY = 0,
+): { path: string; labelX: number; labelY: number; points: [number, number][] } {
+  const pointOnSide = (node: PositionedNode, side: FlowchartDirection): [number, number] => [
+    node.x + (side === 'right' ? node.width / 2 : side === 'left' ? -node.width / 2 : 0),
+    node.y + (side === 'down' ? node.height / 2 : side === 'up' ? -node.height / 2 : 0),
+  ]
+  const normal = (side: FlowchartDirection): [number, number] =>
+    side === 'left' ? [-1, 0] : side === 'right' ? [1, 0] : side === 'up' ? [0, -1] : [0, 1]
+  const start = pointOnSide(source, fromSide)
+  const end = pointOnSide(target, toSide)
+  const startNormal = normal(fromSide)
+  const endNormal = normal(toSide)
+  const stubLength = 20
+  const startStub: [number, number] = [start[0] + startNormal[0] * stubLength, start[1] + startNormal[1] * stubLength]
+  const endStub: [number, number] = [end[0] + endNormal[0] * stubLength, end[1] + endNormal[1] * stubLength]
+  const obstacles = nodes.map((node) => ({
+    left: node.x - node.width / 2 - 8,
+    right: node.x + node.width / 2 + 8,
+    top: node.y - node.height / 2 - 8,
+    bottom: node.y + node.height / 2 + 8,
+  }))
+  const manualPoints = waypoints.map((point): [number, number] => [point.x + originX, point.y + originY])
+  if (manualPoints.length) {
+    const anchors: [number, number][] = [start, startStub, ...manualPoints, endStub, end]
+    const routed: [number, number][] = [anchors[0]]
+    for (let index = 1; index < anchors.length; index++) {
+      const [x1, y1] = anchors[index - 1]
+      const [x2, y2] = anchors[index]
+      const horizontalFirst: [number, number][] = [[x2, y1]]
+      const verticalFirst: [number, number][] = [[x1, y2]]
+      const score = (corners: [number, number][]) => {
+        let collisions = 0
+        for (const [cornerX, cornerY] of corners) {
+          if (obstacles.some((box) => cornerX > box.left && cornerX < box.right && cornerY > box.top && cornerY < box.bottom)) collisions++
+        }
+        return collisions
+      }
+      if (x1 !== x2 && y1 !== y2) routed.push(...(score(horizontalFirst) <= score(verticalFirst) ? horizontalFirst : verticalFirst))
+      routed.push([x2, y2])
     }
-    return { points, axis, collisions, length }
-  }).sort((a, b) => a.collisions - b.collisions || a.length - b.length || Math.abs(a.axis - midpoint) - Math.abs(b.axis - midpoint))
-  const route = ranked[0]
-  const points = route?.points ?? [[startX, startY], [endX, endY]]
+    const points = routed.filter((point, index) => {
+      if (index === 0 || index === routed.length - 1) return true
+      const previous = routed[index - 1]
+      const next = routed[index + 1]
+      return (point[0] - previous[0]) * (next[1] - point[1]) !== (point[1] - previous[1]) * (next[0] - point[0])
+    })
+    return {
+      path: points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x} ${y}`).join(' '),
+      labelX: (start[0] + end[0]) / 2,
+      labelY: (start[1] + end[1]) / 2 - 5,
+      points,
+    }
+  }
+  const xSet = new Set<number>([startStub[0], endStub[0]])
+  const ySet = new Set<number>([startStub[1], endStub[1]])
+  for (const node of nodes) {
+    xSet.add(node.x - node.width / 2 - stubLength)
+    xSet.add(node.x + node.width / 2 + stubLength)
+    ySet.add(node.y - node.height / 2 - stubLength)
+    ySet.add(node.y + node.height / 2 + stubLength)
+  }
+  const xs = [...xSet].sort((a, b) => a - b)
+  const ys = [...ySet].sort((a, b) => a - b)
+  const startXIndex = xs.indexOf(startStub[0])
+  const startYIndex = ys.indexOf(startStub[1])
+  const endXIndex = xs.indexOf(endStub[0])
+  const endYIndex = ys.indexOf(endStub[1])
+  interface RouteState { x: number; y: number; axis: number; cost: number; score: number; previous?: RouteState }
+  const queue: RouteState[] = []
+  function enqueue(state: RouteState) {
+    queue.push(state)
+    let index = queue.length - 1
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2)
+      if (queue[parentIndex].score <= state.score) break
+      queue[index] = queue[parentIndex]
+      index = parentIndex
+    }
+    queue[index] = state
+  }
+  function dequeue(): RouteState | undefined {
+    const first = queue[0]
+    const last = queue.pop()
+    if (!first || !last || !queue.length) return first
+    let index = 0
+    while (index * 2 + 1 < queue.length) {
+      let child = index * 2 + 1
+      if (child + 1 < queue.length && queue[child + 1].score < queue[child].score) child++
+      if (queue[child].score >= last.score) break
+      queue[index] = queue[child]
+      index = child
+    }
+    queue[index] = last
+    return first
+  }
+  const stateKey = (x: number, y: number, axis: number) => `${x}:${y}:${axis}`
+  const initial: RouteState = {
+    x: startXIndex,
+    y: startYIndex,
+    axis: 0,
+    cost: 0,
+    score: Math.abs(startStub[0] - endStub[0]) + Math.abs(startStub[1] - endStub[1]),
+  }
+  enqueue(initial)
+  const best = new Map([[stateKey(initial.x, initial.y, 0), 0]])
+  let finish: RouteState | undefined
+  while (queue.length) {
+    const current = dequeue()
+    if (!current) break
+    if (current.x === endXIndex && current.y === endYIndex) {
+      finish = current
+      break
+    }
+    const neighbors = [
+      [current.x - 1, current.y, 1],
+      [current.x + 1, current.y, 1],
+      [current.x, current.y - 1, 2],
+      [current.x, current.y + 1, 2],
+    ] as const
+    for (const [nextX, nextY, axis] of neighbors) {
+      if (nextX < 0 || nextY < 0 || nextX >= xs.length || nextY >= ys.length) continue
+      const x1 = xs[current.x]
+      const y1 = ys[current.y]
+      const x2 = xs[nextX]
+      const y2 = ys[nextY]
+      const blocked = obstacles.some((box) => {
+        if (axis === 1) return y1 > box.top && y1 < box.bottom && Math.max(Math.min(x1, x2), box.left) < Math.min(Math.max(x1, x2), box.right)
+        return x1 > box.left && x1 < box.right && Math.max(Math.min(y1, y2), box.top) < Math.min(Math.max(y1, y2), box.bottom)
+      })
+      if (blocked) continue
+      const cost = current.cost + Math.abs(x2 - x1) + Math.abs(y2 - y1) + (current.axis !== 0 && current.axis !== axis ? 24 : 0)
+      const nextKey = stateKey(nextX, nextY, axis)
+      if (cost >= (best.get(nextKey) ?? Infinity)) continue
+      best.set(nextKey, cost)
+      enqueue({
+        x: nextX,
+        y: nextY,
+        axis,
+        cost,
+        score: cost + Math.abs(x2 - endStub[0]) + Math.abs(y2 - endStub[1]),
+        previous: current,
+      })
+    }
+  }
+  const routed: [number, number][] = []
+  for (let state = finish; state; state = state.previous) routed.push([xs[state.x], ys[state.y]])
+  routed.reverse()
+  const pathPoints: [number, number][] = finish
+    ? [start, ...routed, end]
+    : [start, startStub, [startStub[0], endStub[1]], endStub, end]
+  const points = pathPoints.filter((point, index) => {
+    if (index === 0 || index === pathPoints.length - 1) return true
+    const previous = pathPoints[index - 1]
+    const next = pathPoints[index + 1]
+    return (point[0] - previous[0]) * (next[1] - point[1]) !== (point[1] - previous[1]) * (next[0] - point[0])
+  })
   return {
     path: points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x} ${y}`).join(' '),
-    labelX: vertical ? (startX + endX) / 2 : route?.axis ?? midpoint,
-    labelY: vertical ? route?.axis ?? midpoint : (startY + endY) / 2 - 5,
+    labelX: (start[0] + end[0]) / 2,
+    labelY: (start[1] + end[1]) / 2 - 5,
+    points,
   }
 }
 
@@ -340,11 +481,13 @@ export function flowchartImageSource(chart: FlowchartData): string {
     const source = positioned.get(connection.fromId)
     const target = positioned.get(connection.toId)
     if (!source || !target) return ''
-    const edge = flowchartConnectionPath(source, target, layout.nodes, connection.direction)
+    const edge = flowchartConnectionPath(source, target, layout.nodes, connection.fromSide, connection.toSide, connection.waypoints, layout.originX, layout.originY)
     const label = connection.branchLabel
       ? `<text x="${edge.labelX}" y="${edge.labelY}" text-anchor="middle" font-size="12" fill="#45465a" stroke="#fff" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${escapeXml(connection.branchLabel)}</text>`
       : ''
-    return `<g><path d="${edge.path}" fill="none" stroke="#77798b" stroke-width="2.5" marker-end="url(#flowchart-arrow)"/>${label}</g>`
+    const markerStart = connection.arrow === 'reverse' || connection.arrow === 'both' ? ' marker-start="url(#flowchart-arrow)"' : ''
+    const markerEnd = connection.arrow === 'forward' || connection.arrow === 'both' ? ' marker-end="url(#flowchart-arrow)"' : ''
+    return `<g><path d="${edge.path}" fill="none" stroke="#77798b" stroke-width="2.5"${markerStart}${markerEnd}/>${label}</g>`
   })
   const nodes = layout.nodes.map(({ node, x, y, width, height }) => {
     const x0 = x - width / 2

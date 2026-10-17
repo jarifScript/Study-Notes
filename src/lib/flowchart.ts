@@ -8,6 +8,7 @@ export interface FlowchartNodeData {
   parentId: string | null
   branchLabel: string
   direction: FlowchartDirection
+  position?: { x: number; y: number }
 }
 
 export interface FlowchartData {
@@ -20,6 +21,7 @@ export interface FlowchartConnectionData {
   fromId: string
   toId: string
   branchLabel: string
+  direction: FlowchartDirection
 }
 
 interface PositionedNode {
@@ -74,7 +76,12 @@ export function parseFlowchart(value: string | null): FlowchartData | null {
         typeof node.shape === 'string' && nodeShapes.includes(node.shape as FlowchartShape) &&
         (node.parentId === null || typeof node.parentId === 'string') &&
         typeof node.branchLabel === 'string' && node.branchLabel.length <= 100 &&
-        (node.direction === undefined || (typeof node.direction === 'string' && flowchartDirections.includes(node.direction as FlowchartDirection)))
+        (node.direction === undefined || (typeof node.direction === 'string' && flowchartDirections.includes(node.direction as FlowchartDirection))) &&
+        (node.position === undefined || (
+          !!node.position && typeof node.position === 'object' &&
+          'x' in node.position && typeof node.position.x === 'number' && Number.isFinite(node.position.x) && Math.abs(node.position.x) <= 100000 &&
+          'y' in node.position && typeof node.position.y === 'number' && Number.isFinite(node.position.y) && Math.abs(node.position.y) <= 100000
+        ))
     })
     if (!validNodes) return null
     const validFlowchartNodes: FlowchartNodeData[] = nodes.map((value) => {
@@ -86,6 +93,7 @@ export function parseFlowchart(value: string | null): FlowchartData | null {
         parentId: node.parentId as string | null,
         branchLabel: node.branchLabel as string,
         direction: (node.direction ?? 'down') as FlowchartDirection,
+        ...(node.position ? { position: node.position as { x: number; y: number } } : {}),
       }
     })
     if (new Set(validFlowchartNodes.map((node) => node.id)).size !== validFlowchartNodes.length) return null
@@ -100,10 +108,14 @@ export function parseFlowchart(value: string | null): FlowchartData | null {
         typeof connection.fromId === 'string' && ids.has(connection.fromId) &&
         typeof connection.toId === 'string' && ids.has(connection.toId) &&
         connection.fromId !== connection.toId &&
-        typeof connection.branchLabel === 'string' && connection.branchLabel.length <= 100
+        typeof connection.branchLabel === 'string' && connection.branchLabel.length <= 100 &&
+        (connection.direction === undefined || (typeof connection.direction === 'string' && flowchartDirections.includes(connection.direction as FlowchartDirection)))
     })
     if (!validConnections) return null
-    const validFlowchartConnections = rawConnections as FlowchartConnectionData[]
+    const validFlowchartConnections = rawConnections.map((value) => {
+      const connection = value as FlowchartConnectionData
+      return { ...connection, direction: connection.direction ?? 'up' }
+    })
     if (new Set(validFlowchartConnections.map((connection) => connection.id)).size !== validFlowchartConnections.length) return null
     const visited = new Set<string>()
     const visiting = new Set<string>()
@@ -147,7 +159,7 @@ export function wrapLabel(label: string, maxLength: number): string[] {
   return lines.length ? lines : ['']
 }
 
-export function layoutFlowchart(chart: FlowchartData): { nodes: PositionedNode[]; width: number; height: number } {
+export function layoutFlowchart(chart: FlowchartData): { nodes: PositionedNode[]; width: number; height: number; originX: number; originY: number } {
   const nodeHeights = new Map(chart.nodes.map((node) => {
     const { width, height } = dimensions(node.shape)
     const lineCount = wrapLabel(node.label, Math.floor(width / 8)).length
@@ -189,25 +201,30 @@ export function layoutFlowchart(chart: FlowchartData): { nodes: PositionedNode[]
   const rows = [...gridPositions.values()].map(({ row }) => row)
   const minColumn = Math.min(0, ...columns)
   const minRow = Math.min(0, ...rows)
-  const maxColumn = Math.max(0, ...columns)
-  const maxRow = Math.max(0, ...rows)
-  const positions = chart.nodes.map((node) => {
+  const rawPositions = chart.nodes.map((node) => {
     const grid = gridPositions.get(node.id) ?? { column: 0, row: 0 }
     const { width } = dimensions(node.shape)
     const height = nodeHeights.get(node.id) ?? dimensions(node.shape).height
     return {
       node,
-      x: 120 + (grid.column - minColumn) * 260,
-      y: 70 + (grid.row - minRow) * 240,
+      x: node.position?.x ?? 120 + (grid.column - minColumn) * 260,
+      y: node.position?.y ?? 70 + (grid.row - minRow) * 240,
       width,
       height,
     }
   })
+  const originX = Math.max(0, 100 - Math.min(...rawPositions.map((item) => item.x - item.width / 2)))
+  const originY = Math.max(0, 80 - Math.min(...rawPositions.map((item) => item.y - item.height / 2)))
+  const positions = rawPositions.map((item) => ({ ...item, x: item.x + originX, y: item.y + originY }))
+  const right = Math.max(...positions.map((item) => item.x + item.width / 2))
+  const bottom = Math.max(...positions.map((item) => item.y + item.height / 2))
+  const connectionMargin = 40 + chart.connections.length * 16
   return {
     nodes: positions,
-    width: Math.max(620, (maxColumn - minColumn) * 260 + 240) +
-      (chart.connections.length ? 80 + chart.connections.length * 20 : 0),
-    height: Math.max(170, (maxRow - minRow) * 240 + 140),
+    width: Math.max(620, right + 100 + connectionMargin),
+    height: Math.max(170, bottom + 80 + connectionMargin),
+    originX,
+    originY,
   }
 }
 
@@ -233,17 +250,65 @@ export function flowchartEdgePath(parent: PositionedNode, child: PositionedNode)
   }
 }
 
+function segmentIntersectsNode(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  node: PositionedNode,
+): boolean {
+  const left = node.x - node.width / 2
+  const right = node.x + node.width / 2
+  const top = node.y - node.height / 2
+  const bottom = node.y + node.height / 2
+  if (y1 === y2) return y1 > top && y1 < bottom && Math.max(Math.min(x1, x2), left) < Math.min(Math.max(x1, x2), right)
+  if (x1 === x2) return x1 > left && x1 < right && Math.max(Math.min(y1, y2), top) < Math.min(Math.max(y1, y2), bottom)
+  return false
+}
+
 export function flowchartConnectionPath(
   source: PositionedNode,
   target: PositionedNode,
-  routeX: number,
+  nodes: PositionedNode[],
+  direction: FlowchartDirection,
 ): { path: string; labelX: number; labelY: number } {
-  const startX = source.x + source.width / 2
-  const endX = target.x + target.width / 2
+  const vertical = direction === 'up' || direction === 'down'
+  const forward = direction === 'down' || direction === 'right'
+  const startX = source.x + (!vertical ? (forward ? source.width : -source.width) / 2 : 0)
+  const startY = source.y + (vertical ? (forward ? source.height : -source.height) / 2 : 0)
+  const endX = target.x + (!vertical ? (forward ? -target.width : target.width) / 2 : 0)
+  const endY = target.y + (vertical ? (forward ? -target.height : target.height) / 2 : 0)
+  const startAxis = vertical ? startY : startX
+  const endAxis = vertical ? endY : endX
+  const axisDistance = endAxis - startAxis
+  const minAxis = Math.min(startAxis, endAxis)
+  const maxAxis = Math.max(startAxis, endAxis)
+  const midpoint = (startAxis + endAxis) / 2
+  const offsets = [0, ...Array.from({ length: 12 }, (_, index) => (index + 1) * 16).flatMap((offset) => [offset, -offset])]
+  const candidates = axisDistance === 0 ? [midpoint] : offsets
+    .map((offset) => midpoint + offset)
+    .filter((axis) => axis > minAxis + 2 && axis < maxAxis - 2)
+  const ranked = candidates.map((axis) => {
+    const points: [number, number][] = vertical
+      ? [[startX, startY], [startX, axis], [endX, axis], [endX, endY]]
+      : [[startX, startY], [axis, startY], [axis, endY], [endX, endY]]
+    let collisions = 0
+    let length = 0
+    for (let index = 1; index < points.length; index++) {
+      const [x1, y1] = points[index - 1]
+      const [x2, y2] = points[index]
+      length += Math.abs(x1 - x2) + Math.abs(y1 - y2)
+      collisions += nodes.filter((node) => node !== source && node !== target)
+        .filter((node) => segmentIntersectsNode(x1, y1, x2, y2, node)).length
+    }
+    return { points, axis, collisions, length }
+  }).sort((a, b) => a.collisions - b.collisions || a.length - b.length || Math.abs(a.axis - midpoint) - Math.abs(b.axis - midpoint))
+  const route = ranked[0]
+  const points = route?.points ?? [[startX, startY], [endX, endY]]
   return {
-    path: `M ${startX} ${source.y} H ${routeX} V ${target.y} H ${endX}`,
-    labelX: routeX,
-    labelY: (source.y + target.y) / 2 - 5,
+    path: points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x} ${y}`).join(' '),
+    labelX: vertical ? (startX + endX) / 2 : route?.axis ?? midpoint,
+    labelY: vertical ? route?.axis ?? midpoint : (startY + endY) / 2 - 5,
   }
 }
 
@@ -271,11 +336,11 @@ export function flowchartImageSource(chart: FlowchartData): string {
       : ''
     return [`<g><path d="${edge.path}" fill="none" stroke="#77798b" stroke-width="2.5" marker-end="url(#flowchart-arrow)"/>${label}</g>`]
   })
-  const connectionEdges = chart.connections.map((connection, index) => {
+  const connectionEdges = chart.connections.map((connection) => {
     const source = positioned.get(connection.fromId)
     const target = positioned.get(connection.toId)
     if (!source || !target) return ''
-    const edge = flowchartConnectionPath(source, target, layout.width - 24 - index * 20)
+    const edge = flowchartConnectionPath(source, target, layout.nodes, connection.direction)
     const label = connection.branchLabel
       ? `<text x="${edge.labelX}" y="${edge.labelY}" text-anchor="middle" font-size="12" fill="#45465a" stroke="#fff" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${escapeXml(connection.branchLabel)}</text>`
       : ''

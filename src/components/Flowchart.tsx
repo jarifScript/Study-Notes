@@ -1,7 +1,8 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react'
 import type { ReactNodeViewProps } from '@tiptap/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { createFlowchart, directionLabels, flowchartConnectionPath, flowchartDirections, flowchartEdgePath, flowchartImageSource, layoutFlowchart, nodeShapes, parseFlowchart, shapeLabels, wrapLabel } from '../lib/flowchart'
 import type { FlowchartConnectionData, FlowchartData, FlowchartDirection, FlowchartNodeData, FlowchartShape } from '../lib/flowchart'
 
@@ -10,11 +11,55 @@ interface FlowchartExtensionOptions {
 }
 
 
-function FlowchartDiagram({ chart }: { chart: FlowchartData }) {
+function FlowchartDiagram({ chart, onNodeMove }: { chart: FlowchartData; onNodeMove?: (id: string, position: { x: number; y: number }) => void }) {
   const layout = layoutFlowchart(chart)
   const positioned = new Map(layout.nodes.map((item) => [item.node.id, item]))
+  const dragging = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null)
 
-  return <svg className="flowchart-diagram" viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label="Flowchart">
+  function pointerPosition(svg: SVGSVGElement, clientX: number, clientY: number) {
+    const point = svg.createSVGPoint()
+    point.x = clientX
+    point.y = clientY
+    const matrix = svg.getScreenCTM()
+    return matrix ? point.matrixTransform(matrix.inverse()) : null
+  }
+
+  function startDragging(event: ReactPointerEvent<SVGGElement>, nodeId: string, x: number, y: number) {
+    if (!onNodeMove) return
+    const svg = event.currentTarget.ownerSVGElement
+    const point = svg && pointerPosition(svg, event.clientX, event.clientY)
+    if (!svg || !point) return
+    event.preventDefault()
+    event.stopPropagation()
+    dragging.current = { id: nodeId, offsetX: point.x - x, offsetY: point.y - y }
+    svg.setPointerCapture(event.pointerId)
+  }
+
+  function moveDragging(event: ReactPointerEvent<SVGSVGElement>) {
+    const active = dragging.current
+    if (!active || !onNodeMove) return
+    const point = pointerPosition(event.currentTarget, event.clientX, event.clientY)
+    if (!point) return
+    onNodeMove(active.id, {
+      x: point.x - active.offsetX - layout.originX,
+      y: point.y - active.offsetY - layout.originY,
+    })
+  }
+
+  function stopDragging(event: ReactPointerEvent<SVGSVGElement>) {
+    dragging.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  return <svg
+    className="flowchart-diagram"
+    viewBox={`0 0 ${layout.width} ${layout.height}`}
+    role={onNodeMove ? 'group' : 'img'}
+    aria-label={onNodeMove ? 'Flowchart preview. Drag nodes to arrange them.' : 'Flowchart'}
+    onPointerMove={onNodeMove ? moveDragging : undefined}
+    onPointerUp={onNodeMove ? stopDragging : undefined}
+    onPointerCancel={onNodeMove ? stopDragging : undefined}
+  >
     <defs><marker id="flowchart-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
     {layout.nodes.flatMap((child) => {
       const { node } = child
@@ -27,21 +72,44 @@ function FlowchartDiagram({ chart }: { chart: FlowchartData }) {
         {node.branchLabel && <text x={edge.labelX} y={edge.labelY}>{node.branchLabel}</text>}
       </g>]
     })}
-    {chart.connections.map((connection, index) => {
+    {chart.connections.map((connection) => {
       const source = positioned.get(connection.fromId)
       const target = positioned.get(connection.toId)
       if (!source || !target) return null
-      const edge = flowchartConnectionPath(source, target, layout.width - 24 - index * 20)
+      const edge = flowchartConnectionPath(source, target, layout.nodes, connection.direction)
       return <g key={connection.id} className="flowchart-edge">
         <path d={edge.path} markerEnd="url(#flowchart-arrow)" />
         {connection.branchLabel && <text x={edge.labelX} y={edge.labelY}>{connection.branchLabel}</text>}
       </g>
     })}
-    {layout.nodes.map(({ node, x, y, width, height }) => {
+    {layout.nodes.map((item) => {
+      const { node, x, y, width, height } = item
       const x0 = x - width / 2
       const y0 = y - height / 2
       const lines = wrapLabel(node.label, Math.floor(width / 8))
-      return <g className="flowchart-node" key={node.id}>
+      return <g
+        className="flowchart-node"
+        key={node.id}
+        tabIndex={onNodeMove ? 0 : undefined}
+        aria-label={onNodeMove ? `${node.label}. Drag to move, or use arrow keys to nudge.` : undefined}
+        onPointerDown={onNodeMove ? (event) => startDragging(event, node.id, x, y) : undefined}
+        onKeyDown={onNodeMove ? (event) => {
+          const delta = event.shiftKey ? 40 : 20
+          const offsets: Partial<Record<string, { x: number; y: number }>> = {
+            ArrowUp: { x: 0, y: -delta },
+            ArrowDown: { x: 0, y: delta },
+            ArrowLeft: { x: -delta, y: 0 },
+            ArrowRight: { x: delta, y: 0 },
+          }
+          const offset = offsets[event.key]
+          if (!offset) return
+          event.preventDefault()
+          onNodeMove(node.id, {
+            x: x - layout.originX + offset.x,
+            y: y - layout.originY + offset.y,
+          })
+        } : undefined}
+      >
         {node.shape === 'decision'
           ? <polygon points={`${x},${y0} ${x0 + width},${y} ${x},${y0 + height} ${x0},${y}`} />
           : node.shape === 'connector'
@@ -154,11 +222,17 @@ export function FlowchartDialog({ initial, onClose, onSave }: FlowchartDialogPro
     const source = chart.nodes.at(-1)
     const target = chart.nodes.find((node) => node.id !== source?.id)
     if (!source || !target) return
+    const positioned = layoutFlowchart(chart).nodes
+    const sourcePosition = positioned.find((item) => item.node.id === source.id)
+    const targetPosition = positioned.find((item) => item.node.id === target.id)
+    const dx = (targetPosition?.x ?? 0) - (sourcePosition?.x ?? 0)
+    const dy = (targetPosition?.y ?? 0) - (sourcePosition?.y ?? 0)
     const connection: FlowchartConnectionData = {
       id: crypto.randomUUID(),
       fromId: source.id,
       toId: target.id,
       branchLabel: '',
+      direction: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'),
     }
     setChart((current) => ({ ...current, connections: [...current.connections, connection] }))
   }
@@ -218,6 +292,9 @@ export function FlowchartDialog({ initial, onClose, onSave }: FlowchartDialogPro
               <label>To<select value={connection.toId} onChange={(event) => updateConnection(connection.id, { toId: event.target.value })}>
                 {chart.nodes.filter((node) => node.id !== connection.fromId).map((node, index) => <option key={node.id} value={node.id}>{index + 1}. {node.label || shapeLabels[node.shape]}</option>)}
               </select></label>
+              <label>Direction<select value={connection.direction} onChange={(event) => updateConnection(connection.id, { direction: event.target.value as FlowchartDirection })}>
+                {flowchartDirections.map((direction) => <option key={direction} value={direction}>{directionLabels[direction]}</option>)}
+              </select></label>
               <label>Branch label<input maxLength={100} value={connection.branchLabel} onChange={(event) => updateConnection(connection.id, { branchLabel: event.target.value })} placeholder="Optional" /></label>
               <button type="button" className="button subtle flowchart-remove-button" onClick={() => setChart((current) => ({
                 ...current,
@@ -229,8 +306,9 @@ export function FlowchartDialog({ initial, onClose, onSave }: FlowchartDialogPro
         </div>
         <div className="flowchart-preview">
           <strong>Preview</strong>
+            <p className="muted flowchart-preview-hint">Drag any node to arrange it. Use arrow keys for precise positioning.</p>
             {previewChart
-              ? <FlowchartDiagram chart={previewChart} />
+                ? <FlowchartDiagram chart={previewChart} onNodeMove={(id, position) => updateNode(id, { position })} />
               : <p className="muted">Parent connections must form a tree without loops to preview the flowchart.</p>}
           </div>
         {error && <p className="form-error" role="alert">{error}</p>}

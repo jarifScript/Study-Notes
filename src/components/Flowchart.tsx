@@ -2,8 +2,8 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react'
 import type { ReactNodeViewProps } from '@tiptap/react'
 import { useEffect, useState } from 'react'
-import { createFlowchart, flowchartImageSource, layoutFlowchart, nodeShapes, parseFlowchart, shapeLabels, wrapLabel } from '../lib/flowchart'
-import type { FlowchartData, FlowchartNodeData, FlowchartShape } from '../lib/flowchart'
+import { createFlowchart, directionLabels, flowchartDirections, flowchartEdgePath, flowchartImageSource, layoutFlowchart, nodeShapes, parseFlowchart, shapeLabels, wrapLabel } from '../lib/flowchart'
+import type { FlowchartData, FlowchartDirection, FlowchartNodeData, FlowchartShape } from '../lib/flowchart'
 
 interface FlowchartExtensionOptions {
   onEdit?: (chart: FlowchartData, position: number) => void
@@ -16,17 +16,15 @@ function FlowchartDiagram({ chart }: { chart: FlowchartData }) {
 
   return <svg className="flowchart-diagram" viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label="Flowchart">
     <defs><marker id="flowchart-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
-    {layout.nodes.flatMap(({ node, x: childX, y: childY, height: childHeight }) => {
+    {layout.nodes.flatMap((child) => {
+      const { node } = child
       if (!node.parentId) return []
       const parent = positioned.get(node.parentId)
       if (!parent) return []
-      const startY = parent.y + parent.height / 2
-      const endY = childY - childHeight / 2
-      const middleY = (startY + endY) / 2
-      const path = `M ${parent.x} ${startY} V ${middleY} H ${childX} V ${endY}`
+      const edge = flowchartEdgePath(parent, child)
       return [<g key={`edge-${node.id}`} className="flowchart-edge">
-        <path d={path} markerEnd="url(#flowchart-arrow)" />
-        {node.branchLabel && <text x={(parent.x + childX) / 2} y={middleY - 5}>{node.branchLabel}</text>}
+        <path d={edge.path} markerEnd="url(#flowchart-arrow)" />
+        {node.branchLabel && <text x={edge.labelX} y={edge.labelY}>{node.branchLabel}</text>}
       </g>]
     })}
     {layout.nodes.map(({ node, x, y, width, height }) => {
@@ -117,7 +115,7 @@ export function FlowchartDialog({ initial, onClose, onSave }: FlowchartDialogPro
     }))
   }
 
-  function addNode() {
+  function addNode(direction: FlowchartDirection = 'down') {
     const parentId = chart.nodes.at(-1)?.id ?? null
     setChart((current) => ({
       nodes: [...current.nodes, {
@@ -126,6 +124,7 @@ export function FlowchartDialog({ initial, onClose, onSave }: FlowchartDialogPro
         shape: 'process',
         parentId,
         branchLabel: '',
+        direction,
       }],
     }))
   }
@@ -165,11 +164,17 @@ export function FlowchartDialog({ initial, onClose, onSave }: FlowchartDialogPro
                 <option value="">No parent (start a separate branch)</option>
                 {chart.nodes.filter((item) => item.id !== node.id).map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.label || shapeLabels[item.shape]}</option>)}
               </select></label>
+              <label>Arrow direction<select value={node.direction ?? 'down'} onChange={(event) => updateNode(node.id, { direction: event.target.value as FlowchartDirection })}>
+                {flowchartDirections.map((direction) => <option key={direction} value={direction}>{directionLabels[direction]}</option>)}
+              </select></label>
               <label>Branch label<input maxLength={100} value={node.branchLabel} onChange={(event) => updateNode(node.id, { branchLabel: event.target.value })} placeholder="e.g. Yes, No, Choice 1" /></label>
             </div>
             <button type="button" className="button subtle flowchart-remove-button" onClick={() => removeNode(node.id)} aria-label={`Remove ${node.label || 'node'}`}>Remove</button>
           </div>)}
-          <button type="button" className="button outline-button" onClick={addNode}>+ Add node</button>
+          <div className="flowchart-add-actions">
+            <button type="button" className="button outline-button" onClick={() => addNode('down')}>+ Add node below</button>
+            <button type="button" className="button outline-button" onClick={() => addNode('right')}>+ Add node to right</button>
+          </div>
         </div>
         <div className="flowchart-preview">
           <strong>Preview</strong>

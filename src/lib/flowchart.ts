@@ -1,4 +1,5 @@
 export type FlowchartShape = 'start' | 'process' | 'decision' | 'connector' | 'end'
+export type FlowchartDirection = 'up' | 'down' | 'left' | 'right'
 
 export interface FlowchartNodeData {
   id: string
@@ -6,6 +7,7 @@ export interface FlowchartNodeData {
   shape: FlowchartShape
   parentId: string | null
   branchLabel: string
+  direction: FlowchartDirection
 }
 
 export interface FlowchartData {
@@ -21,6 +23,13 @@ interface PositionedNode {
 }
 
 export const nodeShapes: FlowchartShape[] = ['start', 'process', 'decision', 'connector', 'end']
+export const flowchartDirections: FlowchartDirection[] = ['down', 'up', 'left', 'right']
+export const directionLabels: Record<FlowchartDirection, string> = {
+  up: 'Up',
+  down: 'Down',
+  left: 'Left',
+  right: 'Right',
+}
 export const shapeLabels: Record<FlowchartShape, string> = {
   start: 'Start',
   process: 'Process',
@@ -34,9 +43,9 @@ export function createFlowchart(): FlowchartData {
   const processId = crypto.randomUUID()
   return {
     nodes: [
-      { id: startId, label: 'Start', shape: 'start', parentId: null, branchLabel: '' },
-      { id: processId, label: 'Process step', shape: 'process', parentId: startId, branchLabel: '' },
-      { id: crypto.randomUUID(), label: 'End', shape: 'end', parentId: processId, branchLabel: '' },
+      { id: startId, label: 'Start', shape: 'start', parentId: null, branchLabel: '', direction: 'down' },
+      { id: processId, label: 'Process step', shape: 'process', parentId: startId, branchLabel: '', direction: 'down' },
+      { id: crypto.randomUUID(), label: 'End', shape: 'end', parentId: processId, branchLabel: '', direction: 'down' },
     ],
   }
 }
@@ -48,19 +57,34 @@ export function parseFlowchart(value: string | null): FlowchartData | null {
     if (!parsed || typeof parsed !== 'object' || !('nodes' in parsed) || !Array.isArray(parsed.nodes)) return null
     const nodes = parsed.nodes as unknown[]
     if (!nodes.length || nodes.length > 100) return null
-    const validNodes = nodes.every((node): node is FlowchartNodeData =>
-      !!node && typeof node === 'object' &&
-      'id' in node && typeof node.id === 'string' &&
-      'label' in node && typeof node.label === 'string' && node.label.length <= 200 &&
-      'shape' in node && typeof node.shape === 'string' && nodeShapes.includes(node.shape as FlowchartShape) &&
-      'parentId' in node && (node.parentId === null || typeof node.parentId === 'string') &&
-      'branchLabel' in node && typeof node.branchLabel === 'string' && node.branchLabel.length <= 100)
-    if (!validNodes || new Set(nodes.map((node) => node.id)).size !== nodes.length) return null
-    const ids = new Set(nodes.map((node) => node.id))
-    if (nodes.some((node) => node.parentId !== null && !ids.has(node.parentId))) return null
+    const validNodes = nodes.every((value) => {
+      if (!value || typeof value !== 'object') return false
+      const node = value as Record<string, unknown>
+      return typeof node.id === 'string' &&
+        typeof node.label === 'string' && node.label.length <= 200 &&
+        typeof node.shape === 'string' && nodeShapes.includes(node.shape as FlowchartShape) &&
+        (node.parentId === null || typeof node.parentId === 'string') &&
+        typeof node.branchLabel === 'string' && node.branchLabel.length <= 100 &&
+        (node.direction === undefined || (typeof node.direction === 'string' && flowchartDirections.includes(node.direction as FlowchartDirection)))
+    })
+    if (!validNodes) return null
+    const validFlowchartNodes: FlowchartNodeData[] = nodes.map((value) => {
+      const node = value as Record<string, unknown>
+      return {
+        id: node.id as string,
+        label: node.label as string,
+        shape: node.shape as FlowchartShape,
+        parentId: node.parentId as string | null,
+        branchLabel: node.branchLabel as string,
+        direction: (node.direction ?? 'down') as FlowchartDirection,
+      }
+    })
+    if (new Set(validFlowchartNodes.map((node) => node.id)).size !== validFlowchartNodes.length) return null
+    const ids = new Set(validFlowchartNodes.map((node) => node.id))
+    if (validFlowchartNodes.some((node) => node.parentId !== null && !ids.has(node.parentId))) return null
     const visited = new Set<string>()
     const visiting = new Set<string>()
-    const byId = new Map(nodes.map((node) => [node.id, node]))
+    const byId = new Map(validFlowchartNodes.map((node) => [node.id, node]))
     function visit(id: string): boolean {
       if (visiting.has(id)) return false
       if (visited.has(id)) return true
@@ -71,8 +95,8 @@ export function parseFlowchart(value: string | null): FlowchartData | null {
       visited.add(id)
       return true
     }
-    if (nodes.some((node) => !visit(node.id))) return null
-    return { nodes }
+    if (validFlowchartNodes.some((node) => !visit(node.id))) return null
+    return { nodes: validFlowchartNodes }
   } catch {
     return null
   }
@@ -101,52 +125,88 @@ export function wrapLabel(label: string, maxLength: number): string[] {
 }
 
 export function layoutFlowchart(chart: FlowchartData): { nodes: PositionedNode[]; width: number; height: number } {
-  const children = new Map<string | null, FlowchartNodeData[]>()
-  for (const node of chart.nodes) {
-    children.set(node.parentId, [...(children.get(node.parentId) ?? []), node])
-  }
-  const subtreeSize = new Map<string, number>()
-  function measure(node: FlowchartNodeData): number {
-    const descendants = children.get(node.id) ?? []
-    const size = Math.max(1, descendants.reduce((total, child) => total + measure(child), 0))
-    subtreeSize.set(node.id, size)
-    return size
-  }
-  const roots = children.get(null) ?? chart.nodes
-  const totalLeaves = roots.reduce((total, root) => total + measure(root), 0)
   const nodeHeights = new Map(chart.nodes.map((node) => {
     const { width, height } = dimensions(node.shape)
     const lineCount = wrapLabel(node.label, Math.floor(width / 8)).length
     return [node.id, height + Math.max(0, lineCount - 2) * 16]
   }))
-  const positions: PositionedNode[] = []
-  function place(node: FlowchartNodeData, left: number, centerY: number) {
-    const size = subtreeSize.get(node.id) ?? 1
-    const { width } = dimensions(node.shape)
-    const height = nodeHeights.get(node.id) ?? dimensions(node.shape).height
-    positions.push({
-      node,
-      x: 35 + (left + size / 2) * 220,
-      y: centerY,
-      width,
-      height,
-    })
-    let childLeft = left
+  const children = new Map<string | null, FlowchartNodeData[]>()
+  for (const node of chart.nodes) children.set(node.parentId, [...(children.get(node.parentId) ?? []), node])
+  const gridPositions = new Map<string, { column: number; row: number }>()
+  const occupied = new Set<string>()
+  const roots = children.get(null) ?? []
+  let nextRootColumn = 0
+
+  function place(node: FlowchartNodeData, column: number, row: number) {
+    gridPositions.set(node.id, { column, row })
+    occupied.add(`${column},${row}`)
     for (const child of children.get(node.id) ?? []) {
-      const childHeight = nodeHeights.get(child.id) ?? dimensions(child.shape).height
-      place(child, childLeft, centerY + height / 2 + 80 + childHeight / 2)
-      childLeft += subtreeSize.get(child.id) ?? 1
+      const direction = child.direction ?? 'down'
+      const [columnStep, rowStep] = direction === 'left' ? [-1, 0]
+        : direction === 'right' ? [1, 0]
+          : direction === 'up' ? [0, -1] : [0, 1]
+      const [offsetColumn, offsetRow] = columnStep === 0 ? [1, 0] : [0, 1]
+      for (let offset = 0; ; offset++) {
+        const signedOffset = offset === 0 ? 0 : Math.ceil(offset / 2) * (offset % 2 ? 1 : -1)
+        const childColumn = column + columnStep + offsetColumn * signedOffset
+        const childRow = row + rowStep + offsetRow * signedOffset
+        if (occupied.has(`${childColumn},${childRow}`)) continue
+        place(child, childColumn, childRow)
+        break
+      }
     }
   }
-  let left = 0
+
   for (const root of roots) {
-    const rootHeight = nodeHeights.get(root.id) ?? dimensions(root.shape).height
-    place(root, left, 23 + rootHeight / 2)
-    left += subtreeSize.get(root.id) ?? 1
+    while (occupied.has(`${nextRootColumn},0`)) nextRootColumn++
+    place(root, nextRootColumn, 0)
+    nextRootColumn += 2
   }
-  const width = Math.max(620, 70 + totalLeaves * 220)
-  const height = Math.max(170, ...positions.map(({ y, height: nodeHeight }) => y + nodeHeight + 50))
-  return { nodes: positions, width, height }
+  const columns = [...gridPositions.values()].map(({ column }) => column)
+  const rows = [...gridPositions.values()].map(({ row }) => row)
+  const minColumn = Math.min(0, ...columns)
+  const minRow = Math.min(0, ...rows)
+  const maxColumn = Math.max(0, ...columns)
+  const maxRow = Math.max(0, ...rows)
+  const positions = chart.nodes.map((node) => {
+    const grid = gridPositions.get(node.id) ?? { column: 0, row: 0 }
+    const { width } = dimensions(node.shape)
+    const height = nodeHeights.get(node.id) ?? dimensions(node.shape).height
+    return {
+      node,
+      x: 120 + (grid.column - minColumn) * 260,
+      y: 70 + (grid.row - minRow) * 240,
+      width,
+      height,
+    }
+  })
+  return {
+    nodes: positions,
+    width: Math.max(620, (maxColumn - minColumn) * 260 + 240),
+    height: Math.max(170, (maxRow - minRow) * 240 + 140),
+  }
+}
+
+export function flowchartEdgePath(parent: PositionedNode, child: PositionedNode): { path: string; labelX: number; labelY: number } {
+  const direction = child.node.direction ?? 'down'
+  if (direction === 'left' || direction === 'right') {
+    const startX = parent.x + (direction === 'right' ? parent.width : -parent.width) / 2
+    const endX = child.x + (direction === 'right' ? -child.width : child.width) / 2
+    const middleX = (startX + endX) / 2
+    return {
+      path: `M ${startX} ${parent.y} H ${middleX} V ${child.y} H ${endX}`,
+      labelX: middleX,
+      labelY: (parent.y + child.y) / 2 - 5,
+    }
+  }
+  const startY = parent.y + (direction === 'down' ? parent.height : -parent.height) / 2
+  const endY = child.y + (direction === 'down' ? -child.height : child.height) / 2
+  const middleY = (startY + endY) / 2
+  return {
+    path: `M ${parent.x} ${startY} V ${middleY} H ${child.x} V ${endY}`,
+    labelX: (parent.x + child.x) / 2,
+    labelY: middleY - 5,
+  }
 }
 
 function escapeXml(value: string): string {
@@ -162,17 +222,16 @@ function escapeXml(value: string): string {
 export function flowchartImageSource(chart: FlowchartData): string {
   const layout = layoutFlowchart(chart)
   const positioned = new Map(layout.nodes.map((item) => [item.node.id, item]))
-  const edges = layout.nodes.flatMap(({ node, x: childX, y: childY, height: childHeight }) => {
+  const edges = layout.nodes.flatMap((child) => {
+    const { node } = child
     if (!node.parentId) return []
     const parent = positioned.get(node.parentId)
     if (!parent) return []
-    const startY = parent.y + parent.height / 2
-    const endY = childY - childHeight / 2
-    const middleY = (startY + endY) / 2
+    const edge = flowchartEdgePath(parent, child)
     const label = node.branchLabel
-      ? `<text x="${(parent.x + childX) / 2}" y="${middleY - 5}" text-anchor="middle" font-size="12" fill="#45465a" stroke="#fff" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${escapeXml(node.branchLabel)}</text>`
+      ? `<text x="${edge.labelX}" y="${edge.labelY}" text-anchor="middle" font-size="12" fill="#45465a" stroke="#fff" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${escapeXml(node.branchLabel)}</text>`
       : ''
-    return [`<g><path d="M ${parent.x} ${startY} V ${middleY} H ${childX} V ${endY}" fill="none" stroke="#77798b" stroke-width="2.5" marker-end="url(#flowchart-arrow)"/>${label}</g>`]
+    return [`<g><path d="${edge.path}" fill="none" stroke="#77798b" stroke-width="2.5" marker-end="url(#flowchart-arrow)"/>${label}</g>`]
   })
   const nodes = layout.nodes.map(({ node, x, y, width, height }) => {
     const x0 = x - width / 2

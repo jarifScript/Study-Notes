@@ -224,17 +224,17 @@ h1 { margin: 9px 0; font-size: clamp(27px, 5vw, 36px); letter-spacing: -.045em; 
 .flowchart-dialog-body { min-height: 0; padding: 16px 22px; overflow: auto; }
 .flowchart-node-list { display: grid; gap: 10px; }
 .flowchart-node-row { display: flex; align-items: flex-end; gap: 9px; padding: 12px; border: 1px solid #e9eaf0; border-radius: 9px; }
-.flowchart-node-fields { min-width: 0; flex: 1; display: grid; grid-template-columns: 1.2fr .8fr 1.4fr 1fr; gap: 9px; }
+.flowchart-node-fields { min-width: 0; flex: 1; display: grid; grid-template-columns: 1.2fr .8fr 1.4fr .9fr 1fr; gap: 9px; }
 .flowchart-node-fields label { min-width: 0; display: grid; gap: 5px; color: #686b78; font-size: 11px; font-weight: 600; }
 .flowchart-node-fields input, .flowchart-node-fields select { width: 100%; min-width: 0; min-height: 40px; padding: 0 9px; border: 1px solid #e2e3e9; border-radius: 7px; color: #20242d; background: #fff; font: inherit; }
 .flowchart-remove-button { flex: 0 0 auto; min-height: 40px; }
+.flowchart-add-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .flowchart-preview { margin-top: 18px; padding: 12px; border: 1px solid #e9eaf0; border-radius: 9px; overflow: hidden; }
 .flowchart-preview > strong { display: block; margin-bottom: 8px; font-size: 12px; }
 .flowchart-preview .flowchart-diagram { max-height: 340px; }
 .rich-editor-area table, .answer-content table { width: 100%; margin: 1em 0; border-collapse: collapse; table-layout: fixed; }
 .rich-editor-area th, .rich-editor-area td, .answer-content th, .answer-content td { min-width: 0; padding: 8px; border: 1px solid #b8bbc5; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-.rich-editor-area table tr:first-child > *, .answer-content table tr:first-child > * { text-align: center !important; }
-.rich-editor-area th, .answer-content th { background: #f1f0ff; font-weight: 700; }
+.rich-editor-area th, .answer-content th { background: #f1f0ff; font-weight: 700; text-align: center; }
 .rich-editor-area img, .answer-content img { max-width: 100%; height: auto; border-radius: 8px; }
 .rich-editor-area h2, .answer-content h2 { font-size: 1.22em; }
 .rich-editor-area pre, .answer-content pre { max-width: 100%; padding: 13px; overflow: auto; border-radius: 8px; background: #f2f2f6; }

@@ -6,8 +6,9 @@ import Link from '@tiptap/extension-link'
 import OrderedList from '@tiptap/extension-ordered-list'
 import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
+import TextAlign from '@tiptap/extension-text-align'
 import { TableKit } from '@tiptap/extension-table/kit'
-import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Underline as UnderlineIcon, Undo, Workflow } from 'lucide-react'
+import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, List, ListOrdered, Minus, Plus, Quote, Redo, Rows3, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Table2, Trash2, Underline as UnderlineIcon, Undo, Workflow } from 'lucide-react'
 import { client } from '../lib/data'
 import { createFlowchart } from '../lib/flowchart'
 import type { FlowchartData } from '../lib/flowchart'
@@ -61,6 +62,7 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
       Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'] }),
       Subscript,
       Superscript,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TableKit.configure({ table: { resizable: false } }),
     ],
     shouldRerenderOnTransaction: true,
@@ -172,8 +174,15 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
   if (!editor) return <div className="editor-loading">Loading editor…</div>
 
   const isCellCentered = editor.isActive('tableCell', { align: 'center' }) || editor.isActive('tableHeader', { align: 'center' })
+  const isTextCentered = editor.isActive('paragraph', { textAlign: 'center' }) || editor.isActive('heading', { textAlign: 'center' })
   const isRomanList = editor.isActive('orderedList', { type: 'i' })
   const isNumberedList = editor.isActive('orderedList') && !isRomanList
+
+  function toggleTextAlign() {
+    const chain = editor.chain().focus()
+    if (isTextCentered) chain.unsetTextAlign().run()
+    else chain.setTextAlign('center').run()
+  }
 
   function toggleNumberedList() {
     if (!editor.isActive('orderedList')) {
@@ -208,8 +217,10 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
         <button type="button" onClick={toggleNumberedList} aria-label="Numbered list" title="Numbered list" aria-pressed={isNumberedList} className={isNumberedList ? 'active' : ''}><ListOrdered size={17} /></button>
         <button type="button" onClick={toggleRomanList} aria-label="Roman numeral list" title="Roman numeral list" aria-pressed={isRomanList} className={isRomanList ? 'active' : ''}><span className="roman-list-icon" aria-hidden="true">i.</span></button>
         <button type="button" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} aria-label="Insert comparison grid" title="Insert comparison grid"><Table2 size={17} /></button>
+        {!editor.isActive('table') && <button type="button" onClick={toggleTextAlign} aria-label="Center answer text" title="Center answer text" aria-pressed={isTextCentered} className={isTextCentered ? 'active' : ''}><AlignCenter size={17} /></button>}
         {editor.isActive('table') && <>
           <button type="button" onClick={() => editor.chain().focus().setCellAttribute('align', isCellCentered ? null : 'center').run()} aria-label="Center cell text" title="Center cell text" aria-pressed={isCellCentered} className={isCellCentered ? 'active' : ''}><AlignCenter size={17} /></button>
+          <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().deleteTable().run()} aria-label="Remove entire grid" title="Remove entire grid"><Trash2 size={17} /></button>
           <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().addRowAfter().run()} aria-label="Add table row" title="Add row"><Rows3 size={17} /><Plus size={12} /></button>
           <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().deleteRow().run()} aria-label="Remove table row" title="Remove row" disabled={!editor.can().deleteRow()}><Rows3 size={17} /><Minus size={12} /></button>
           <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().addColumnAfter().run()} aria-label="Add table column" title="Add column"><Columns3 size={17} /><Plus size={12} /></button>

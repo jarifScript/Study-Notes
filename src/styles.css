@@ -229,6 +229,12 @@ h1 { margin: 9px 0; font-size: clamp(27px, 5vw, 36px); letter-spacing: -.045em; 
 .flowchart-node-fields input, .flowchart-node-fields select { width: 100%; min-width: 0; min-height: 40px; padding: 0 9px; border: 1px solid #e2e3e9; border-radius: 7px; color: #20242d; background: #fff; font: inherit; }
 .flowchart-remove-button { flex: 0 0 auto; min-height: 40px; }
 .flowchart-add-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.flowchart-connections { display: grid; gap: 9px; padding: 12px; border: 1px solid #e9eaf0; border-radius: 9px; }
+.flowchart-connections > strong { font-size: 13px; }
+.flowchart-connections > p { margin: -5px 0 0; font-size: 12px; }
+.flowchart-connection-row { display: grid; grid-template-columns: 1fr 1fr 1.2fr auto; align-items: end; gap: 9px; padding: 10px; border: 1px solid #e9eaf0; border-radius: 8px; }
+.flowchart-connection-row label { min-width: 0; display: grid; gap: 5px; color: #686b78; font-size: 11px; font-weight: 600; }
+.flowchart-connection-row input, .flowchart-connection-row select { width: 100%; min-width: 0; min-height: 40px; padding: 0 9px; border: 1px solid #e2e3e9; border-radius: 7px; color: #20242d; background: #fff; font: inherit; }
 .flowchart-preview { margin-top: 18px; padding: 12px; border: 1px solid #e9eaf0; border-radius: 9px; overflow: hidden; }
 .flowchart-preview > strong { display: block; margin-bottom: 8px; font-size: 12px; }
 .flowchart-preview .flowchart-diagram { max-height: 340px; }
@@ -405,6 +411,7 @@ h1 { margin: 9px 0; font-size: clamp(27px, 5vw, 36px); letter-spacing: -.045em; 
   .answer-content { padding: 9px 3px 7px 26px; font-size: 13px; }
   .flowchart-node-row { align-items: stretch; flex-direction: column; }
   .flowchart-node-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flowchart-connection-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .flowchart-remove-button { align-self: flex-end; }
   .flowchart-dialog > .dialog-header, .flowchart-dialog > .dialog-footer { padding-inline: 15px; }
   .flowchart-dialog-body { padding-inline: 15px; }

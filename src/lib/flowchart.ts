@@ -12,6 +12,14 @@ export interface FlowchartNodeData {
 
 export interface FlowchartData {
   nodes: FlowchartNodeData[]
+  connections: FlowchartConnectionData[]
+}
+
+export interface FlowchartConnectionData {
+  id: string
+  fromId: string
+  toId: string
+  branchLabel: string
 }
 
 interface PositionedNode {
@@ -42,6 +50,7 @@ export function createFlowchart(): FlowchartData {
   const startId = crypto.randomUUID()
   const processId = crypto.randomUUID()
   return {
+    connections: [],
     nodes: [
       { id: startId, label: 'Start', shape: 'start', parentId: null, branchLabel: '', direction: 'down' },
       { id: processId, label: 'Process step', shape: 'process', parentId: startId, branchLabel: '', direction: 'down' },
@@ -82,6 +91,20 @@ export function parseFlowchart(value: string | null): FlowchartData | null {
     if (new Set(validFlowchartNodes.map((node) => node.id)).size !== validFlowchartNodes.length) return null
     const ids = new Set(validFlowchartNodes.map((node) => node.id))
     if (validFlowchartNodes.some((node) => node.parentId !== null && !ids.has(node.parentId))) return null
+    const rawConnections = 'connections' in parsed ? parsed.connections : []
+    if (!Array.isArray(rawConnections) || rawConnections.length > 200) return null
+    const validConnections = rawConnections.every((value) => {
+      if (!value || typeof value !== 'object') return false
+      const connection = value as Record<string, unknown>
+      return typeof connection.id === 'string' &&
+        typeof connection.fromId === 'string' && ids.has(connection.fromId) &&
+        typeof connection.toId === 'string' && ids.has(connection.toId) &&
+        connection.fromId !== connection.toId &&
+        typeof connection.branchLabel === 'string' && connection.branchLabel.length <= 100
+    })
+    if (!validConnections) return null
+    const validFlowchartConnections = rawConnections as FlowchartConnectionData[]
+    if (new Set(validFlowchartConnections.map((connection) => connection.id)).size !== validFlowchartConnections.length) return null
     const visited = new Set<string>()
     const visiting = new Set<string>()
     const byId = new Map(validFlowchartNodes.map((node) => [node.id, node]))
@@ -96,7 +119,7 @@ export function parseFlowchart(value: string | null): FlowchartData | null {
       return true
     }
     if (validFlowchartNodes.some((node) => !visit(node.id))) return null
-    return { nodes: validFlowchartNodes }
+    return { nodes: validFlowchartNodes, connections: validFlowchartConnections }
   } catch {
     return null
   }
@@ -182,7 +205,8 @@ export function layoutFlowchart(chart: FlowchartData): { nodes: PositionedNode[]
   })
   return {
     nodes: positions,
-    width: Math.max(620, (maxColumn - minColumn) * 260 + 240),
+    width: Math.max(620, (maxColumn - minColumn) * 260 + 240) +
+      (chart.connections.length ? 80 + chart.connections.length * 20 : 0),
     height: Math.max(170, (maxRow - minRow) * 240 + 140),
   }
 }
@@ -209,6 +233,20 @@ export function flowchartEdgePath(parent: PositionedNode, child: PositionedNode)
   }
 }
 
+export function flowchartConnectionPath(
+  source: PositionedNode,
+  target: PositionedNode,
+  routeX: number,
+): { path: string; labelX: number; labelY: number } {
+  const startX = source.x + source.width / 2
+  const endX = target.x + target.width / 2
+  return {
+    path: `M ${startX} ${source.y} H ${routeX} V ${target.y} H ${endX}`,
+    labelX: routeX,
+    labelY: (source.y + target.y) / 2 - 5,
+  }
+}
+
 function escapeXml(value: string): string {
   return value.replace(/[<>&'"]/g, (character) => ({
     '<': '&lt;',
@@ -222,7 +260,7 @@ function escapeXml(value: string): string {
 export function flowchartImageSource(chart: FlowchartData): string {
   const layout = layoutFlowchart(chart)
   const positioned = new Map(layout.nodes.map((item) => [item.node.id, item]))
-  const edges = layout.nodes.flatMap((child) => {
+  const parentEdges = layout.nodes.flatMap((child) => {
     const { node } = child
     if (!node.parentId) return []
     const parent = positioned.get(node.parentId)
@@ -232,6 +270,16 @@ export function flowchartImageSource(chart: FlowchartData): string {
       ? `<text x="${edge.labelX}" y="${edge.labelY}" text-anchor="middle" font-size="12" fill="#45465a" stroke="#fff" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${escapeXml(node.branchLabel)}</text>`
       : ''
     return [`<g><path d="${edge.path}" fill="none" stroke="#77798b" stroke-width="2.5" marker-end="url(#flowchart-arrow)"/>${label}</g>`]
+  })
+  const connectionEdges = chart.connections.map((connection, index) => {
+    const source = positioned.get(connection.fromId)
+    const target = positioned.get(connection.toId)
+    if (!source || !target) return ''
+    const edge = flowchartConnectionPath(source, target, layout.width - 24 - index * 20)
+    const label = connection.branchLabel
+      ? `<text x="${edge.labelX}" y="${edge.labelY}" text-anchor="middle" font-size="12" fill="#45465a" stroke="#fff" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${escapeXml(connection.branchLabel)}</text>`
+      : ''
+    return `<g><path d="${edge.path}" fill="none" stroke="#77798b" stroke-width="2.5" marker-end="url(#flowchart-arrow)"/>${label}</g>`
   })
   const nodes = layout.nodes.map(({ node, x, y, width, height }) => {
     const x0 = x - width / 2
@@ -245,7 +293,7 @@ export function flowchartImageSource(chart: FlowchartData): string {
     const label = lines.map((line, index) => `<tspan x="${x}" dy="${index === 0 ? -(lines.length - 1) * 8 : 16}">${escapeXml(line)}</tspan>`).join('')
     return `<g>${shape}<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" fill="#45465a">${label}</text></g>`
   })
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}"><defs><marker id="flowchart-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#77798b"/></marker></defs>${edges.join('')}${nodes.join('')}</svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}"><defs><marker id="flowchart-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#77798b"/></marker></defs>${parentEdges.join('')}${connectionEdges.join('')}${nodes.join('')}</svg>`
   const bytes = new TextEncoder().encode(svg)
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)

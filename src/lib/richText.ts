@@ -26,3 +26,18 @@ export function questionImagePath(source: string): string | null {
     return null
   }
 }
+
+export function canonicalizeQuestionImageSources(html: string): string {
+  const template = document.createElement('template')
+  template.innerHTML = html
+  let changed = false
+  for (const image of template.content.querySelectorAll<HTMLImageElement>('img[src]')) {
+    const source = image.getAttribute('src')
+    if (!source) continue
+    const path = questionImagePath(source)
+    if (!path || source === `storage://${path}`) continue
+    image.setAttribute('src', `storage://${path}`)
+    changed = true
+  }
+  return changed ? template.innerHTML : html
+}

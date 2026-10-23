@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { client } from '../lib/data'
 import type { AppLanguage, Question, QuestionType } from '../types/database'
 import { questionTypes } from '../lib/data'
+import { canonicalizeQuestionImageSources } from '../lib/richText'
 import { VoiceInput } from './VoiceInput'
 import { useToast } from './Toast'
 
@@ -77,18 +78,17 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
   })
   const notify = useToast()
 
-  function persistDraft(patch: Partial<QuestionDraft> = {}) {
+  const persistDraft = useCallback((patch: Partial<QuestionDraft> = {}) => {
     const next = { ...draftRef.current, ...patch }
     draftRef.current = next
-    let draftAnswer = next.answer
-    for (const image of next.readyForSave) draftAnswer = draftAnswer.replaceAll(image.url, `storage://${image.path}`)
+    const draftAnswer = canonicalizeQuestionImageSources(next.answer)
     try {
       localStorage.setItem(draftKey, JSON.stringify({ ...next, answer: draftAnswer }))
       setDraftError('')
     } catch {
       setDraftError('Your draft could not be saved in this browser. Keep this page open until you save your question.')
     }
-  }
+  }, [draftKey])
 
   useEffect(() => {
     function saveOnPageExit() {
@@ -101,9 +101,19 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
       window.removeEventListener('pagehide', saveOnPageExit)
       document.removeEventListener('visibilitychange', saveOnPageExit)
     }
-  }, [draftKey])
+  }, [persistDraft])
 
-  async function uploadImage(file: File) {
+  const handleAnswerChange = useCallback((nextAnswer: string) => {
+    setAnswer(nextAnswer)
+    persistDraft({ answer: nextAnswer })
+  }, [persistDraft])
+
+  const handleImageUrlsReady = useCallback((images: { path: string; url: string }[]) => {
+    setReadyForSave(images)
+    persistDraft({ readyForSave: images })
+  }, [persistDraft])
+
+  const uploadImage = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
       throw new Error('Choose an image smaller than 10 MB.')
     }
@@ -121,7 +131,7 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
     setUploaded(nextUploaded)
     persistDraft({ uploaded: nextUploaded })
     return uploadedImage
-  }
+  }, [persistDraft])
 
   async function cleanupUncommittedImages() {
     if (committed.current || !uploaded.length) return
@@ -153,8 +163,7 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
     setSaving(true)
     setError('')
     try {
-      let storedAnswer = answer
-      for (const image of readyForSave) storedAnswer = storedAnswer.replaceAll(image.url, `storage://${image.path}`)
+      const storedAnswer = canonicalizeQuestionImageSources(answer)
       let position = initial?.position
       if (!initial || type !== initial.type) {
         const { data: lastQuestion, error: positionError } = await client().from('questions')
@@ -280,13 +289,7 @@ export function QuestionForm({ chapterId, initial, initialType, language, onClos
           </ul>}
           <label className="voice-field-label answer-label">Answer <VoiceInput onText={(text) => insertAnswerText.current?.(text)} /></label>
           <Suspense fallback={<div className="editor-loading">Loading editor…</div>}>
-            <RichTextEditor value={answer} onChange={(nextAnswer) => {
-              setAnswer(nextAnswer)
-              persistDraft({ answer: nextAnswer })
-            }} onUploadImage={uploadImage} onImageUrlsReady={(images) => {
-              setReadyForSave(images)
-              persistDraft({ readyForSave: images })
-            }} onInsertTextRef={(insert) => { insertAnswerText.current = insert }} />
+            <RichTextEditor value={answer} onChange={handleAnswerChange} onUploadImage={uploadImage} onImageUrlsReady={handleImageUrlsReady} onInsertTextRef={(insert) => { insertAnswerText.current = insert }} />
           </Suspense>
           {error && <p className="form-error" role="alert">{error}</p>}
           {draftError && <p className="form-error" role="alert">{draftError}</p>}

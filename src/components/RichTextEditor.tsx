@@ -12,7 +12,7 @@ import { AlignCenter, Bold, Code, Columns3, Heading2, ImagePlus, Italic, Link2, 
 import { client } from '../lib/data'
 import { createFlowchart } from '../lib/flowchart'
 import type { FlowchartData } from '../lib/flowchart'
-import { orderedListStyleForType, questionImagePath } from '../lib/richText'
+import { canonicalizeQuestionImageSources, orderedListStyleForType, questionImagePath } from '../lib/richText'
 import { FlowchartDialog, FlowchartExtension } from './Flowchart'
 
 interface ImageUpload {
@@ -133,12 +133,11 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
       imageMappings.current = mappings
       onImageUrlsReady(mappings)
       let html = value
-      let canonicalHtml = value
+      const canonicalHtml = canonicalizeQuestionImageSources(value)
       for (const image of sources) {
         const item = mappings.find((mapping) => mapping.path === image.path)
         if (!item) continue
         html = html.replaceAll(image.source, item.url)
-        canonicalHtml = canonicalHtml.replaceAll(image.source, `storage://${image.path}`)
       }
       if (html !== editor.getHTML()) editor.commands.setContent(html || '', { emitUpdate: false })
       if (canonicalHtml !== value) onChange(canonicalHtml)

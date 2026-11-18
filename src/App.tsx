@@ -105,19 +105,19 @@ function App() {
   }, [session])
 
   if (!isSupabaseConfigured) return <SetupNotice />
-  if (checkingSession) return <main className="auth-shell"><div className="loading-block" aria-label="Loading" /></main>
-  if (session && !adminAllowed) return <main className="auth-shell"><div className="loading-block" aria-label="Verifying admin access" /></main>
+  if (checkingSession) return <main className="auth-shell"><div className="loading-block" role="status" aria-label="Loading" /></main>
+  if (session && !adminAllowed) return <main className="auth-shell"><div className="loading-block" role="status" aria-label="Verifying admin access" /></main>
 
   return <ToastProvider><Routes>
-    <Route path="/s/:token" element={<Suspense fallback={<main className="shared-shell"><div className="loading-panel" /></main>}><SharedView /></Suspense>} />
+    <Route path="/s/:token" element={<Suspense fallback={<main className="shared-shell"><div className="loading-panel" role="status" aria-label="Loading shared notes" /></main>}><SharedView /></Suspense>} />
     <Route path="/login" element={session && adminAllowed ? <Navigate to="/" replace /> : <Login accessDenied={accessDenied} />} />
     <Route element={session && adminAllowed ? <AppShell /> : <Navigate to="/login" replace />}>
       <Route path="/" element={<Home />} />
-      <Route path="/subject/:id" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" /></main>}><SubjectPage /></Suspense>} />
-      <Route path="/manage" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" /></main>}><ManageHome /></Suspense>} />
-      <Route path="/manage/subject/:id" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" /></main>}><SubjectPage manage /></Suspense>} />
-      <Route path="/shares" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" /></main>}><ManageShares /></Suspense>} />
-      <Route path="/search" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" /></main>}><SearchPage /></Suspense>} />
+      <Route path="/subject/:id" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" role="status" aria-label="Loading page content" /></main>}><SubjectPage /></Suspense>} />
+      <Route path="/manage" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" role="status" aria-label="Loading page content" /></main>}><ManageHome /></Suspense>} />
+      <Route path="/manage/subject/:id" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" role="status" aria-label="Loading page content" /></main>}><SubjectPage manage /></Suspense>} />
+      <Route path="/shares" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" role="status" aria-label="Loading page content" /></main>}><ManageShares /></Suspense>} />
+      <Route path="/search" element={<Suspense fallback={<main className="page-content"><div className="loading-panel" role="status" aria-label="Loading search results" /></main>}><SearchPage /></Suspense>} />
     </Route>
     <Route path="*" element={<Navigate to={session ? '/' : '/login'} replace />} />
   </Routes></ToastProvider>

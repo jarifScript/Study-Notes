@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { common, createLowlight } from 'lowlight'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import OrderedList from '@tiptap/extension-ordered-list'
@@ -20,6 +22,28 @@ interface ImageUpload {
   path: string
 }
 
+const lowlight = createLowlight(common)
+
+const codeLanguages = [
+  ['plaintext', 'Plain text'],
+  ['python', 'Python'],
+  ['javascript', 'JavaScript'],
+  ['typescript', 'TypeScript'],
+  ['java', 'Java'],
+  ['c', 'C'],
+  ['cpp', 'C++'],
+  ['csharp', 'C#'],
+  ['php', 'PHP'],
+  ['ruby', 'Ruby'],
+  ['go', 'Go'],
+  ['rust', 'Rust'],
+  ['sql', 'SQL'],
+  ['html', 'HTML'],
+  ['css', 'CSS'],
+  ['bash', 'Bash'],
+  ['json', 'JSON'],
+] as const
+
 interface RichTextEditorProps {
   value: string
   onChange: (value: string) => void
@@ -35,7 +59,20 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
   const [flowchartDialog, setFlowchartDialog] = useState<{ chart: FlowchartData; position?: number } | null>(null)
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ orderedList: false }),
+      StarterKit.configure({ orderedList: false, codeBlock: false, link: false }),
+      CodeBlockLowlight.extend({
+        addAttributes() {
+          return {
+            language: {
+              default: 'plaintext',
+              parseHTML: (element) => element.getAttribute('data-language') ||
+                element.querySelector('code')?.getAttribute('data-language') ||
+                'plaintext',
+              renderHTML: (attributes) => ({ 'data-language': attributes.language || 'plaintext' }),
+            },
+          }
+        },
+      }).configure({ lowlight }),
       FlowchartExtension.configure({
         onEdit: (chart, position) => setFlowchartDialog({ chart, position }),
       }),
@@ -176,6 +213,8 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
   const isTextCentered = editor.isActive('paragraph', { textAlign: 'center' }) || editor.isActive('heading', { textAlign: 'center' })
   const isRomanList = editor.isActive('orderedList', { type: 'i' })
   const isNumberedList = editor.isActive('orderedList') && !isRomanList
+  const isCodeBlock = editor.isActive('codeBlock')
+  const codeLanguage = (editor.getAttributes('codeBlock').language as string) || 'plaintext'
 
   function toggleTextAlign() {
     const chain = editor.chain().focus()
@@ -205,7 +244,7 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
 
   return (
     <div className="rich-editor">
-      <div className="editor-toolbar" role="toolbar" aria-label="Answer formatting" onMouseDown={(event) => event.preventDefault()}>
+      <div className="editor-toolbar" role="toolbar" aria-label="Answer formatting">
         <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} aria-label="Bold" title="Bold" aria-pressed={editor.isActive('bold')} className={editor.isActive('bold') ? 'active' : ''}><Bold size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic" title="Italic" aria-pressed={editor.isActive('italic')} className={editor.isActive('italic') ? 'active' : ''}><Italic size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline" title="Underline" aria-pressed={editor.isActive('underline')} className={editor.isActive('underline') ? 'active' : ''}><UnderlineIcon size={17} /></button>
@@ -225,7 +264,24 @@ export function RichTextEditor({ value, onChange, onUploadImage, onImageUrlsRead
           <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().addColumnAfter().run()} aria-label="Add table column" title="Add column"><Columns3 size={17} /><Plus size={12} /></button>
           <button className="table-adjust-button" type="button" onClick={() => editor.chain().focus().deleteColumn().run()} aria-label="Remove table column" title="Remove column" disabled={!editor.can().deleteColumn()}><Columns3 size={17} /><Minus size={12} /></button>
         </>}
-        <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} aria-label="Code block" title="Code block"><Code size={17} /></button>
+        {isCodeBlock && <select
+          className="code-language-select"
+          value={codeLanguage}
+          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const language = event.target.value
+            editor.chain().updateAttributes('codeBlock', { language }).run()
+          }}
+          aria-label="Code language"
+          title="Code language"
+        >
+          {codeLanguages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>}
+        <button type="button" onClick={() => {
+          if (isCodeBlock) editor.chain().focus().toggleCodeBlock().run()
+          else editor.chain().focus().toggleCodeBlock().updateAttributes('codeBlock', { language: 'plaintext' }).run()
+        }} aria-label="Code block" title="Code block" aria-pressed={isCodeBlock} className={isCodeBlock ? 'active' : ''}><Code size={17} /></button>
         <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} aria-label="Quote" title="Quote"><Quote size={17} /></button>
         <button type="button" onClick={() => setFlowchartDialog({ chart: createFlowchart() })} aria-label="Create flowchart" title="Create flowchart"><Workflow size={17} /></button>
         <button type="button" onClick={addLink} aria-label="Add link" title="Add link"><Link2 size={17} /></button>

@@ -48,7 +48,7 @@ export function SearchPage() {
 
   return <main className="page-content search-content">
     <div className="page-heading"><div><span className="eyebrow">{language === 'bn' ? 'আপনার লাইব্রেরি' : 'YOUR LIBRARY'}</span><h1>Search notes</h1><p className="muted">{term ? `Results for “${term}”` : 'Search across your questions and answers.'}</p></div></div>
-    {!term ? <section className="empty-state"><div className="empty-icon"><SearchIcon size={21} /></div><h2>Start searching</h2><p>Type in the search box above to find questions and answers.</p></section> : loading ? <div className="loading-panel" /> : results.length === 0 ? <section className="empty-state"><h2>No matches found</h2><p>Try another word or phrase.</p></section> : (
+    {!term ? <section className="empty-state"><div className="empty-icon"><SearchIcon size={21} /></div><h2>Start searching</h2><p>Type in the search box above to find questions and answers.</p></section> : loading ? <div className="loading-panel" role="status" aria-label="Loading search results" /> : results.length === 0 ? <section className="empty-state"><h2>No matches found</h2><p>Try another word or phrase.</p></section> : (
       <div className="search-results">{results.map((result) => {
         const subject = result.chapters?.subjects
         const semester = subject?.semesters

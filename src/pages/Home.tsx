@@ -73,7 +73,7 @@ export function Home() {
         <button className="icon-button sidebar-close-mobile" onClick={() => setSidebarOpen(false)} aria-label="Close semester sidebar"><X size={18} /></button>
         <button className="icon-button sidebar-close-wide" onClick={() => setSidebarOpen(false)} aria-label="Close semester sidebar"><PanelLeftClose size={18} /></button>
       </div>
-      {loading ? <div className="browse-sidebar-skeleton" aria-label="Loading semesters" /> : semesters.length ? (
+      {loading ? <div className="browse-sidebar-skeleton" role="status" aria-label="Loading semesters" /> : semesters.length ? (
         <nav className="browse-semesters" aria-label={language === 'bn' ? 'সেমিস্টার বেছে নিন' : 'Choose a semester'}>
           {semesters.map((semester, index) => <button key={semester.id} className={`browse-semester ${semester.id === selectedId ? 'selected' : ''}`} onClick={() => selectSemester(semester.id)}>
             <span className="semester-index">{String(index + 1).padStart(2, '0')}</span><span>{semester.name}</span><ChevronRight size={16} />
@@ -90,13 +90,13 @@ export function Home() {
         <div><span className="eyebrow">{selectedSemester?.name ?? (language === 'bn' ? 'আপনার লাইব্রেরি' : 'YOUR LIBRARY')}</span><h1>{language === 'bn' ? 'বিষয়' : 'Subjects'}</h1></div>
         {selectedSemester && <span className="browse-count">{subjects.length} {language === 'bn' ? 'বিষয়' : subjects.length === 1 ? 'subject' : 'subjects'}</span>}
       </header>
-      {loading ? <div className="browse-subject-grid browse-subject-grid-loading" aria-label="Loading subjects">{[1, 2, 3].map((item) => <div className="browse-subject-skeleton" key={item} />)}</div>
+      {loading ? <div className="browse-subject-grid browse-subject-grid-loading" role="status" aria-label="Loading subjects">{[1, 2, 3].map((item) => <div className="browse-subject-skeleton" key={item} />)}</div>
         : semesters.length === 0 ? <section className="browse-empty">
           <span className="browse-icon"><LibraryBig size={24} /></span><h2>Your library is ready</h2>
           <p>There are no study notes here yet. Visit the library manager to add your first semester and begin building your collection.</p>
           <Link className="button primary" to="/manage">Open library manager <ChevronRight size={17} /></Link>
         </section>
-        : loadingSubjects ? <div className="browse-subject-grid browse-subject-grid-loading" aria-label="Loading subjects">{[1, 2, 3].map((item) => <div className="browse-subject-skeleton" key={item} />)}</div>
+        : loadingSubjects ? <div className="browse-subject-grid browse-subject-grid-loading" role="status" aria-label="Loading subjects">{[1, 2, 3].map((item) => <div className="browse-subject-skeleton" key={item} />)}</div>
           : subjects.length === 0 ? <section className="browse-empty-subject browse-no-subjects"><BookOpen size={23} /><h2>{language === 'bn' ? 'কোনো সাবজেক্ট নেই' : 'No subjects yet'}</h2><p>{language === 'bn' ? 'এই সেমিস্টারে এখনও কোনো সাবজেক্ট নেই।' : 'There are no subjects in this semester yet.'}</p></section>
             : <div className="browse-subject-grid browse-subject-grid-main">
               {subjects.map((subject) => <Link className="browse-subject" to={`/subject/${subject.id}`} key={subject.id}>

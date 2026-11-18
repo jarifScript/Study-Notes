@@ -69,7 +69,7 @@ export function ManageShares() {
 
   return <main className="page-content manage-content">
     <div className="page-heading"><div><span className="eyebrow">PRIVACY</span><h1>Shared links</h1><p className="muted">Manage the notes accessible through your private links.</p></div><Link className="button outline-button" to="/"><ExternalLink size={16} /> My library</Link></div>
-    {loading ? <div className="loading-panel" /> : activeLinks.length === 0 ? <section className="empty-state"><div className="empty-icon"><Link2 size={21} /></div><h2>No active links</h2><p>Share a semester, subject, chapter, or question to create a private link.</p><Link className="button primary" to="/">Browse my notes</Link></section> : (
+    {loading ? <div className="loading-panel" role="status" aria-label="Loading shared links" /> : activeLinks.length === 0 ? <section className="empty-state"><div className="empty-icon"><Link2 size={21} /></div><h2>No active links</h2><p>Share a semester, subject, chapter, or question to create a private link.</p><Link className="button primary" to="/">Browse my notes</Link></section> : (
       <div className="share-table">
         {activeLinks.map((link) => <article className="share-row" key={link.id}>
           <div className="share-row-main"><span className={`share-scope ${link.expires_at && new Date(link.expires_at).getTime() <= Date.now() ? 'expired' : ''}`}>{link.expires_at && new Date(link.expires_at).getTime() <= Date.now() ? 'Expired' : link.scope_type}</span><h2>{link.name}</h2><p className="muted">{link.expires_at ? `Expires ${new Date(link.expires_at).toLocaleString()}` : 'No expiry'} · Created {new Date(link.created_at).toLocaleDateString()}</p></div>

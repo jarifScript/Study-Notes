@@ -311,7 +311,7 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
       </aside>
       {drawerOpen && <button className="drawer-scrim" aria-label="Close chapter menu" onClick={() => setDrawerOpen(false)} />}
       <main className="page-content subject-content">
-        {loading ? <div className="loading-panel" /> : !subject ? <section className="empty-state"><h2>Subject unavailable</h2><Link to="/">Return home</Link></section> : !activeChapter ? (
+        {loading ? <div className="loading-panel" role="status" aria-label="Loading subject" /> : !subject ? <section className="empty-state"><h2>Subject unavailable</h2><Link to="/">Return home</Link></section> : !activeChapter ? (
           <section className="empty-state large-empty"><div className="empty-icon"><BookOpenIcon /></div><span className="eyebrow">{subject.name.toUpperCase()}</span><h1>No chapters yet</h1><p>{manage ? 'Add your first chapter. Its question sections are ready automatically.' : 'There are no chapters in this subject yet.'}</p>{manage && <button className="button primary" onClick={() => setDialog({ title: 'Add chapter', placeholder: 'e.g. Introduction', save: (name) => saveChapter(name) })}><Plus size={17} /> Add Chapter</button>}</section>
         ) : (
           <>
@@ -341,7 +341,7 @@ export function SubjectPage({ manage = false }: { manage?: boolean }) {
               {questionTypes.map((type) => (
                 <section className="question-section" id={`section-${type.id}`} key={type.id}>
                   <div className="section-heading"><div><span className="eyebrow">{language === 'bn' ? 'প্রশ্নের ধরণ' : 'QUESTION TYPE'}</span><h2>{language === 'bn' ? type.banglaQuestionTitle : type.questionTitle} <span className="count-badge">{grouped[type.id].length}</span></h2></div>{manage && <button className="button outline-button" onClick={() => openQuestionForm(type.id)}><Plus size={16} /> Add Question</button>}</div>
-                  {loadingQuestions ? <div className="section-empty section-loading">Loading questions…</div> : grouped[type.id].length ? <div className="question-list">{grouped[type.id].map((question) => <QuestionCard key={question.id} question={question} serialNumber={questionNumbers.get(question.id)} readOnly={!manage} onEdit={manage ? () => openQuestionForm(type.id, question) : undefined} onDelete={manage ? () => void deleteQuestion(question) : undefined} onMove={manage ? (direction) => void moveQuestion(question, direction) : undefined} />)}</div> : <div className="section-empty">{language === 'bn' ? ({
+                  {loadingQuestions ? <div className="section-empty section-loading" role="status">Loading questions…</div> : grouped[type.id].length ? <div className="question-list">{grouped[type.id].map((question) => <QuestionCard key={question.id} question={question} serialNumber={questionNumbers.get(question.id)} readOnly={!manage} onEdit={manage ? () => openQuestionForm(type.id, question) : undefined} onDelete={manage ? () => void deleteQuestion(question) : undefined} onMove={manage ? (direction) => void moveQuestion(question, direction) : undefined} />)}</div> : <div className="section-empty">{language === 'bn' ? ({
                     very_short: 'এখনো কোনো অতি সংক্ষিপ্ত প্রশ্ন নেই।',
                     short: 'এখনো কোনো সংক্ষিপ্ত প্রশ্ন নেই।',
                     long: 'এখনো কোনো রচনামূলক প্রশ্ন নেই।',

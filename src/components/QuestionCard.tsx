@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { common, createLowlight } from 'lowlight'
 import { ChevronDown, ChevronUp, MoreHorizontal, Pencil, Share2, Trash2 } from 'lucide-react'
 import type { Question, ShareScope } from '../types/database'
 import { client, friendlyError } from '../lib/data'
@@ -28,6 +29,31 @@ DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
   }
 })
 
+const codeLowlight = createLowlight(common)
+
+interface HighlightNode {
+  type: 'root' | 'text' | 'element'
+  value?: string
+  tagName?: string
+  properties?: { className?: string[] }
+  children?: HighlightNode[]
+}
+
+function appendHighlightNodes(parent: HTMLElement, nodes: HighlightNode[]) {
+  for (const node of nodes) {
+    if (node.type === 'text') {
+      parent.append(document.createTextNode(node.value ?? ''))
+      continue
+    }
+    if (node.type === 'element') {
+      const element = document.createElement(node.tagName || 'span')
+      if (node.properties?.className?.length) element.className = node.properties.className.join(' ')
+      appendHighlightNodes(element, node.children ?? [])
+      parent.append(element)
+    }
+  }
+}
+
 export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove, readOnly = false, shareImage }: {
   question: Pick<Question, 'id' | 'type' | 'question' | 'answer' | 'board_years' | 'position'>
   serialNumber?: number
@@ -41,6 +67,7 @@ export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove,
   const [sharing, setSharing] = useState(false)
   const [answer, setAnswer] = useState(question.answer)
   const [imageError, setImageError] = useState(false)
+  const cardRef = useRef<HTMLElement>(null)
   const notify = useToast()
 
   useEffect(() => {
@@ -67,11 +94,46 @@ export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove,
       }
       if (!active) return
       const sanitized = DOMPurify.sanitize(html, {
-        ADD_ATTR: ['target'],
+        ADD_ATTR: ['target', 'data-language'],
         ALLOWED_URI_REGEXP: /^(?:(?:https?:\/\/|mailto:|storage:\/\/).+|data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*)$/i,
       })
       const template = document.createElement('template')
       template.innerHTML = sanitized
+      for (const pre of template.content.querySelectorAll<HTMLPreElement>('pre')) {
+        if (pre.parentElement?.classList.contains('code-block-shell')) continue
+        const code = pre.querySelector('code')
+        const rawLanguage = pre.getAttribute('data-language') ||
+          code?.getAttribute('data-language') ||
+          code?.className.match(/(?:^|\s)language-([\w+-]+)/)?.[1] ||
+          'plaintext'
+        const language = rawLanguage === 'plaintext' ? 'Plain text' : rawLanguage.toUpperCase()
+        pre.setAttribute('data-language', rawLanguage)
+        if (code && rawLanguage !== 'plaintext') {
+          try {
+            const highlighted = codeLowlight.highlight(rawLanguage, code.textContent ?? '') as unknown as HighlightNode
+            code.replaceChildren()
+            appendHighlightNodes(code, highlighted.children ?? [])
+          } catch {
+            console.warn(`Could not highlight code language: ${rawLanguage}`)
+          }
+        }
+        const shell = document.createElement('div')
+        shell.className = 'code-block-shell'
+        const header = document.createElement('div')
+        header.className = 'code-block-header'
+        const label = document.createElement('span')
+        label.className = 'code-block-language'
+        label.textContent = language
+        const copy = document.createElement('button')
+        copy.type = 'button'
+        copy.className = 'code-block-copy'
+        copy.setAttribute('data-copy-code', '')
+        copy.textContent = 'Copy'
+        header.append(label, copy)
+        shell.append(header)
+        pre.parentNode?.insertBefore(shell, pre)
+        shell.append(pre)
+      }
       for (const container of template.content.querySelectorAll('[data-study-flowchart]')) {
         const image = container.querySelector<HTMLImageElement>('img.flowchart-image')
         if (!image) continue
@@ -88,8 +150,31 @@ export function QuestionCard({ question, serialNumber, onEdit, onDelete, onMove,
     return () => { active = false }
   }, [notify, question.answer, readOnly, shareImage])
 
+  useEffect(() => {
+    const card = cardRef.current
+    if (!card) return
+    const buttons = card.querySelectorAll<HTMLButtonElement>('[data-copy-code]')
+    const cleanups = [...buttons].map((button) => {
+      const handler = async () => {
+        const pre = button.closest('.code-block-shell')?.querySelector('pre')
+        if (!pre) return
+        try {
+          await navigator.clipboard.writeText(pre.innerText)
+          button.textContent = 'Copied!'
+          window.setTimeout(() => { button.textContent = 'Copy' }, 1400)
+        } catch {
+          button.textContent = 'Could not copy'
+          window.setTimeout(() => { button.textContent = 'Copy' }, 1400)
+        }
+      }
+      button.addEventListener('click', handler)
+      return () => button.removeEventListener('click', handler)
+    })
+    return () => cleanups.forEach((cleanup) => cleanup())
+  }, [answer])
+
   return (
-    <article className="question-card" id={`question-${question.id}`}>
+    <article ref={cardRef} className="question-card" id={`question-${question.id}`}>
       <div className="question-card-heading">
         <button className="question-toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
           {expanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}

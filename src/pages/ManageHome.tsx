@@ -134,7 +134,7 @@ export function ManageHome() {
       </aside>
       {drawerOpen && <button className="drawer-scrim" aria-label="Close semester menu" onClick={() => setDrawerOpen(false)} />}
       <main className="page-content">
-        {loading ? <div className="skeleton-grid">{[1, 2, 3].map((item) => <div className="skeleton-card" key={item} />)}</div> : semesters.length === 0 ? (
+        {loading ? <div className="skeleton-grid" role="status" aria-label="Loading subjects">{[1, 2, 3].map((item) => <div className="skeleton-card" key={item} />)}</div> : semesters.length === 0 ? (
           <section className="empty-state large-empty">
             <div className="empty-icon"><BookOpen size={22} /></div><span className="eyebrow">A FRESH START</span>
             <h1>No semesters yet</h1><p>Add your first semester to start organising your study notes.</p>

@@ -85,7 +85,7 @@ export function SharedView() {
     return url
   }, [token])
 
-  if (loading) return <main className="shared-shell"><div className="loading-panel" aria-label="Loading shared notes" /></main>
+  if (loading) return <main className="shared-shell"><div className="loading-panel" role="status" aria-label="Loading shared notes" /></main>
   if (loadError) return <main className="shared-shell"><section className="link-unavailable"><span className="empty-icon"><LockKeyhole size={22} /></span><h1>Couldn’t check this link</h1><p>We couldn’t reach the notes service. Check your connection and try again.</p><button className="button outline-button" onClick={() => { setLoadError(false); setLoading(true); setAttempt((value) => value + 1) }}>Try again</button></section></main>
   if (!available || !payload) return <main className="shared-shell"><section className="link-unavailable"><span className="empty-icon"><LockKeyhole size={22} /></span><h1>Link not available</h1><p>This link may have expired, been revoked, or no longer exist.</p></section></main>
 
